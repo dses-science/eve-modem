@@ -19,7 +19,8 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 REPO="${GITHUB_REPO:-dses-science/eve-modem}"
 URL="https://github.com/${REPO}.git"
-EXCLUDE=(CLAUDE.md .githooks)       # private working notes and local hooks; add paths here if needed
+# private working notes, local hooks, and third-party drawings not ours to republish
+EXCLUDE=(CLAUDE.md .githooks docs/hardware/Ettus_B210_Enclosure_Drawing.pdf)
 # filter-repo message callback (Python, bytes): drop co-author trailer lines
 TRAILERS='import re
 return re.sub(rb"(?im)^[ \t]*co-authored-by:[^\n]*(?:\n|$)", b"", message).rstrip() + b"\n"'
