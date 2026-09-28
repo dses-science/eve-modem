@@ -173,23 +173,28 @@ def fig_blocks():
     # middle row: radio and transmit chain
     box(2, 40, 22, 8, "TX NCO source\nradio rate, phase-continuous,\nIF offset, chunk gating,\n"
                       "-f_D(t) pre-compensation", fs=6.5)
-    box(30, 40, 16, 8, "USRP B210\nTX/RX A  ->\nRX2 A  <-\nGPIO key", fc="#FFF4E8", ec=VERM,
-        bold=True, fs=6.8)
-    box(52, 40, 14, 8, "2 W driver\n+ 1200 W SSPA\n+ sequencer", fs=6.8)
-    box(72, 40, 12, 8, "feed\n1299.5 MHz", fs=6.8)
+    box(30, 40, 16, 8, "USRP B210\nTX/RX A  ->\nRX2 A  <-\nGPIO keys unused", fc="#FFF4E8",
+        ec=VERM, bold=True, fs=6.8)
+    box(51, 40, 10, 8, "20 W\ndriver", fs=6.8)
+    box(65, 40, 19, 8, "feed, 1299.5 MHz\n1200 W SSPA\nmounted at the feed", fs=6.8)
     box(88, 42, 10, 4, "Venus", fc="#EEF5EE", ec=TEAL, bold=True)
     arrow(30, 55, 13, 48)                       # schedule -> TX NCO source
     arrow(24, 45, 30, 45)                       # TX samples -> B210
-    arrow(46, 45.5, 52, 45.5)                   # RF drive -> PA
-    arrow(46, 41.5, 52, 41.5, ls="--")          # keying line (GPIO) -> sequencer
-    ax.text(49, 39.2, "key", fontsize=6, color=GREY, ha="center")
-    arrow(66, 44, 72, 44); arrow(84, 44, 88, 44)
+    arrow(46, 45.5, 51, 45.5)                   # RF drive -> driver
+    arrow(61, 44, 65, 44); arrow(84, 44, 88, 44)
     seg(89, 55, 89, 51); seg(89, 51, 38, 51); arrow(38, 51, 38, 48)   # GPS -> B210 REF/PPS
     ax.text(63, 51.8, "REF IN / PPS IN", fontsize=6, color=GREY, ha="center")
-    # receive chain
-    box(72, 29, 12, 6, "LNA", fs=6.8)
-    arrow(92, 42, 80, 35)                       # Venus echo -> LNA
-    seg(72, 32, 44, 32); arrow(44, 32, 44, 40)  # LNA -> B210 RX2
+    # receive chain and keying: the USB relay board drives both key lines, timed by the modem
+    # (the B210 GPIO carries the same keys in parallel, unused at DSES; Rick, 2026-09-28)
+    box(72, 28, 12, 6, "LNA", fs=6.8)
+    arrow(92, 42, 80, 34)                       # Venus echo -> LNA
+    seg(78, 28, 78, 24); seg(78, 24, 44, 24); arrow(44, 24, 44, 40)   # LNA -> B210 RX2
+    box(46, 27, 16, 7, "USB dual-relay board\nTX key, LNA key\n(timed by the modem)",
+        fc="#F7F7F7", fs=6.2)
+    arrow(54, 34, 54, 40, ls="--")              # TX key -> amplifier chain
+    ax.text(55.2, 36.6, "TX key", fontsize=6, color=GREY, ha="left")
+    arrow(62, 31, 72, 31, ls="--")              # LNA key -> LNA
+    ax.text(67, 32.3, "LNA key", fontsize=6, color=GREY, ha="center")
     box(26, 26, 14, 8, "EveRxSink\nmix down IF, RX NCO\n(+f_D residual),\ndecimate /32", fs=6.2)
     arrow(34, 40, 34, 34)
     box(2, 26, 20, 8, "raw IQ archive\n.eve.iq + JSON sidecar\n(47,022.08 S/s)", fc="#F7F7F7", fs=6.5)
@@ -205,9 +210,13 @@ def fig_blocks():
     arrow(66, 16, 72, 16)
     box(88, 12, 10, 8, "session\nreport", fc="#E8F0F4", bold=True, fs=6.8)
     arrow(84, 16, 88, 16)
-    ax.text(3, 2, "One B210, one schedule, one Doppler model shared by transmit and receive. "
-                  "The schedule file is the contract with any partner station.",
-            fontsize=6.5, color=GREY)
+    ax.text(3, 6.0, "One B210, one schedule, one Doppler model shared by transmit and receive. "
+                    "The schedule file is the contract with any partner station.\n"
+                    "The sequencer is the modem: it times the TX and LNA key lines through the "
+                    "USB dual-relay board. The B210 GPIO pins carry the same keys in\n"
+                    "parallel, for a station with an external sequencer at the feed as ORI has, "
+                    "but DSES does not use them.",
+            fontsize=6.3, color=GREY, va="top", linespacing=1.35)
     fig.tight_layout(); fig.savefig(OUT / "fig_blocks.png", dpi=300); plt.close(fig)
 
 

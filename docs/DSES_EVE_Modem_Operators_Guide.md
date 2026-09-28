@@ -5,7 +5,7 @@
 |---|---|
 | Document | DSES EVE Modem Operator's Guide |
 | Revision | Rev C — DRAFT (program 1.0.8) |
-| Date | 2026-09-23 |
+| Date | 2026-09-28 |
 | Prepared by | Rick Hambly, K0GD, Deep Space Exploration Society |
 | Companion | DSES EVE Modem Design Description and ICD (Rev C): the why behind every setting |
 | Where it lives | This text is the application's Help → Operator's guide, and `docs/DSES_EVE_Modem_Operators_Guide.pdf` |
@@ -42,10 +42,10 @@ the program.
 |---|---|
 | B210 | On a USB 3 port of the PC (a direct rear port, not the powered extension cable). It appears in Device Manager under "USRPs". After a power event that leaves it unrecognized, unplug USB and the DC barrel for 15 s (a true cold start). |
 | GPS reference clock (Leo Bodnar) | OUT1 to the B210 **REF IN** (10 MHz). OUT2 to the B210 **PPS IN** (with output 2 disabled the OUT2 connector carries the 1 PPS; the program sets this). USB to the PC. GPS antenna with a clear sky view. Both LEDs steady after a few minutes = locked. |
-| Switching (TX key and LNA) | The modem is the sequencer: two signals, each on two outputs in parallel. **USB relay board** (DIUSTOU DSTUR-T20, `docs/hardware/diustou_dstur_t20.md`): relay 1 COM/NO = TX key (closed = transmit), relay 2 COM/NO = LNA control (closed = LNA off). **B210 J504** through an external circuit: **GPIO_0** = TX key (high = transmit), **GPIO_1** = LNA (high = LNA off), ground on pin 9 or 10, 3.3 V logic. Both released / low = receive, so an unplugged board or a dead PC leaves the feed receiving. GPIO_0 alone can drive an external sequencer (DB6NT style); GPIO_1 is then ignored. On the DSES clone the front-panel IO connector is a white 2x5 shrouded header (2.54 mm pitch, 10-pin IDC ribbon socket or Dupont leads) whose legend gives the GPIO numbers: top row G 6 4 2 0, bottom row G 7 5 3 1. Never straight to a sequencer input without the isolating circuit. |
-| Transmit | B210 **TX/RX A** to the driver's input pad. The B210 gives at most +8 dBm; the driver decides the TX gain setting (Setup → TX gain). |
+| Switching (TX key and LNA) | The modem is the sequencer: two signals, TX key and LNA control, timed in software. At DSES they go out on the **USB relay board** (DIUSTOU DSTUR-T20, `docs/hardware/diustou_dstur_t20.md`): relay 1 COM/NO = TX key (closed = transmit), relay 2 COM/NO = LNA control (closed = LNA off), on separate lines to the amplifier and to the LNA at the feed. Both released = receive, so an unplugged board or a dead PC leaves the feed receiving. The program also drives the same two signals on the **B210 J504** GPIO pins in parallel — **GPIO_0** = TX key (high = transmit), **GPIO_1** = LNA (high = LNA off), ground on pin 9 or 10, 3.3 V logic — for a station with its own external sequencer at the feed, as ORI has; DSES does not use them. (GPIO_0 alone can drive an external sequencer, DB6NT style, GPIO_1 then ignored. On the DSES clone the front-panel IO connector is a white 2x5 shrouded header, 2.54 mm pitch, 10-pin IDC ribbon socket or Dupont leads, whose legend gives the GPIO numbers: top row G 6 4 2 0, bottom row G 7 5 3 1. Never straight to a sequencer input without an isolating circuit.) |
+| Transmit | B210 **TX/RX A** to the 20 W driver's input pad; the driver feeds the 1200 W SSPA at the feed. The B210 gives at most +8 dBm; the driver decides the TX gain setting (Setup → TX gain). |
 | Receive | LNA output (through the bandpass filter if fitted) to B210 **RX2 A**. Nothing on RX2 for the loopback bench. |
-| Sequencer | None in the station: the modem sequences the LNA and the transmitter itself (LNA off, guard, TX on; TX off, release, LNA on; abort takes the same way out, transmitter first). The amplifier's own interlocks stay armed; the 2 kW load only for the thermal test. |
+| Sequencer | None in the station: the modem sequences the LNA and the transmitter itself through the USB relay board (LNA off, guard, TX on; TX off, release, LNA on; abort takes the same way out, transmitter first). The amplifier's own interlocks stay armed; the 2 kW load only for the thermal test. |
 | PC clock | The PC needs internet NTP (the second number of the PPS-edge time set comes from it). Windows: Settings → Time → Sync now. |
 | Pointing | The dish tracks the target under System 1 (RA/Dec, J2000). The Run tab shows the target's azimuth and elevation from the ephemeris for a cross-check. |
 | Archive folder | A folder with room for the run: about 24 MB per 30-minute pass at the modem rate. |
@@ -79,7 +79,7 @@ Every control has a tooltip: hover over it or its label. The essentials:
 |---|---|
 | Software simulation | No radio. Proves the decoder and the display at a chosen signal-to-noise. Run it first on any new PC. |
 | Bench loopback | One B210, nothing on the antenna ports. Transmits at low gain, receives its own internal leakage. Proves the radio, the reference, the archive, and the decoder before anything goes on the air. |
-| Signal generator | The B210 as a bench source for the RF package: CW, two tones, or the EVE waveform at the dial frequency, running until you stop it. You key and unkey through the sequencer as often as you like, and change the signal, the TX gain, and a digital scale while it runs, or step the gain on a timer. For power-out, compression, and tuning measurements on the 23 cm and 13 cm packages, and for checking the station's wiring to the relays and GPIO lines with no RF at all. See section 4.6. |
+| Signal generator | The B210 as a bench source for the RF package: CW, two tones, or the EVE waveform at the dial frequency, running until you stop it. You key and unkey through the sequencer as often as you like, and change the signal, the TX gain, and a digital scale while it runs, or step the gain on a timer. For power-out, compression, and tuning measurements on the 23 cm and 13 cm packages, and for checking the station's wiring to the relays with no RF at all. See section 4.6. |
 | Interop with a partner station | Compatibility test with ORI's own hardware and software, on the bench through a cable and attenuator or across the room: transmit only (their receiver decodes us) or receive only (their generator transmits, we archive and decode). No Doppler, no round trip, no amplifier limits. See section 7.1. |
 | EME | Moon bounce. Ephemeris from JPL Horizons, Doppler pre-compensated, transmit 2.4 s then listen for the 2.5 s echo, repeat. The rehearsal before Venus. |
 | EVE | Venus bounce. 240 s transmit chunks against the 272 s round trip. A full message is 30.2 minutes per pass; plan five passes. |
@@ -149,12 +149,14 @@ and says so in the teal line under the run modes.
   (plus a PPS source) back in service, untick it; the B210's own lock check still runs.
 - **Archive folder**: where the run's files go.
 - **Keying**: the modem is the station's sequencer (design 7.2, D24). *none* switches
-  nothing (bench, simulation, receive only). Otherwise two signals go out on two outputs
-  in parallel: **TX key** (relay 1 of the USB board and B210 GPIO_0; energized or high =
-  transmit) and **LNA** (relay 2 and GPIO_1; energized or high = LNA off). Both released
-  is receive. The USB board's port is *auto*: the program finds the board wherever it is
-  today. If no board answers, the run goes ahead on the GPIO lines and tells you so in a
-  box, the status bar, and the log. **Test TX** and **Test LNA** click the relays for a
+  nothing (bench, simulation, receive only). Otherwise two signals go out: **TX key**
+  (relay 1 of the USB board; energized = transmit) and **LNA** (relay 2; energized = LNA
+  off). Both released is receive. The same two signals appear on B210 GPIO_0 and GPIO_1
+  in parallel, for a station with an external sequencer at the feed; DSES does not use
+  them. The USB board's port is *auto*: the program finds the board wherever it is today.
+  If no board answers, the run goes ahead on the GPIO lines alone and tells you so in a
+  box, the status bar, and the log; at DSES that keys nothing, so find the board before
+  transmitting. **Test TX** and **Test LNA** click the relays for a
   second without touching the radio. The two guard times are the gaps between switching
   the LNA off and keying the transmitter, and between unkeying and switching the LNA back
   on; the RF starts 200 ms after the key as before. The switching runs in **every** mode,
@@ -188,7 +190,7 @@ writes the log. Use it for any fault. The same button is on the Run tab.
 ## 4.6 Signal generator
 
 The **Signal generator** run mode turns the B210 into the bench source for integrating
-the RF package: driver, amplifier, filters, feed, and the sequencer wiring. It behaves
+the RF package: the 20 W driver, the amplifier at the feed, filters, feed, and the relay wiring. It behaves
 like a bench instrument, not a timed session. **START** brings it up with the key up and
 it stays up until you press **STOP generator** on the Run tab. Nothing is received or
 decoded.
@@ -199,7 +201,7 @@ you use while it runs:
 <!-- widths: 1.4,5.3 -->
 | Control | What it does |
 |---|---|
-| KEY | Keys the transmitter through the sequencer: LNA off, guard, TX key (relay 1 and GPIO_0), then the RF after the key lead. The key lamp turns red. |
+| KEY | Keys the transmitter through the sequencer: LNA off, guard, TX key (relay 1), then the RF after the key lead. The key lamp turns red. |
 | UNKEY | Releases it: RF off, key lag, TX key off, release, LNA on. The generator stays up; press **KEY** again whenever you are ready. |
 | Sweep | Runs the timed TX-gain sweep now (the key must be down and **Sweep** ticked on the Setup tab). |
 | STOP generator | Ends the run cleanly: the key is released, the radio closed, the report written. **ABORT** does the same and marks the run aborted. |
@@ -227,7 +229,7 @@ signal change with its UTC time; it lands in the archive folder.
 A typical bench session: a **Dry run** first to hear the relays click in the right order;
 then the B210 into the driver through an attenuator, with the power meter on the output,
 at **TX gain** 0 and **Digital scale** -20 dB; **KEY**, raise the gain until the meter
-reads the driver's rated output, **UNKEY**; then **KEY** with **Sweep** set across the
+reads the driver's rated 20 W, **UNKEY**; then **KEY** with **Sweep** set across the
 last 20 dB in 1 dB steps to find the 1 dB compression point. Know the driver's maximum
 input before you raise the gain: the B210 can deliver about +10 dBm, far more than a
 high-gain driver needs. Never run the generator into an amplifier without the load or
