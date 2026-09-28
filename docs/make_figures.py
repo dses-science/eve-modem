@@ -160,8 +160,8 @@ def fig_blocks():
         ax.add_patch(FancyArrowPatch((x0, y0), (x1, y1), arrowstyle="-|>", mutation_scale=9,
                                      color=color, lw=0.9, ls=ls, shrinkA=1, shrinkB=1))
 
-    def seg(x0, y0, x1, y1, color=GREY):
-        ax.plot([x0, x1], [y0, y1], color=color, lw=0.9, solid_capstyle="round")
+    def seg(x0, y0, x1, y1, color=GREY, ls="-"):
+        ax.plot([x0, x1], [y0, y1], color=color, lw=0.9, ls=ls, solid_capstyle="round")
 
     # top row: inputs
     box(2, 55, 22, 7, "message text\n+ CRC-16 -> BCH(127,106)\n-> 11 symbols", fs=6.8)
@@ -175,13 +175,15 @@ def fig_blocks():
                       "-f_D(t) pre-compensation", fs=6.5)
     box(30, 40, 16, 8, "USRP B210\nTX/RX A  ->\nRX2 A  <-\nGPIO keys unused", fc="#FFF4E8",
         ec=VERM, bold=True, fs=6.8)
-    box(51, 40, 10, 8, "20 W\ndriver", fs=6.8)
-    box(65, 40, 19, 8, "feed, 1299.5 MHz\n1200 W SSPA\nmounted at the feed", fs=6.8)
+    box(50, 40, 10, 8, "20 W driver\ncontrol room", fs=6.5)
+    box(66, 40, 18, 8, "feed, 1299.5 MHz\n1200 W SSPA + pre-driver\n2 W in, at the feed", fs=6.3)
     box(88, 42, 10, 4, "Venus", fc="#EEF5EE", ec=TEAL, bold=True)
     arrow(30, 55, 13, 48)                       # schedule -> TX NCO source
     arrow(24, 45, 30, 45)                       # TX samples -> B210
-    arrow(46, 45.5, 51, 45.5)                   # RF drive -> driver
-    arrow(61, 44, 65, 44); arrow(84, 44, 88, 44)
+    arrow(46, 45.5, 50, 45.5)                   # RF drive -> driver
+    arrow(60, 44, 66, 44); arrow(84, 44, 88, 44)  # LMR-600 to the feed; feed -> Venus
+    ax.text(63, 45.2, "LMR-600\n−10 dB", fontsize=5.2, color=GREY, ha="center",
+            va="bottom", linespacing=1.1)
     seg(89, 55, 89, 51); seg(89, 51, 38, 51); arrow(38, 51, 38, 48)   # GPS -> B210 REF/PPS
     ax.text(63, 51.8, "REF IN / PPS IN", fontsize=6, color=GREY, ha="center")
     # receive chain and keying: the USB relay board drives both key lines, timed by the modem
@@ -191,8 +193,9 @@ def fig_blocks():
     seg(78, 28, 78, 24); seg(78, 24, 44, 24); arrow(44, 24, 44, 40)   # LNA -> B210 RX2
     box(46, 27, 16, 7, "USB dual-relay board\nTX key, LNA key\n(timed by the modem)",
         fc="#F7F7F7", fs=6.2)
-    arrow(54, 34, 54, 40, ls="--")              # TX key -> amplifier chain
-    ax.text(55.2, 36.6, "TX key", fontsize=6, color=GREY, ha="left")
+    seg(58, 34, 58, 38, ls="--"); seg(58, 38, 75, 38, ls="--")   # TX key -> the SSPA at the feed
+    arrow(75, 38, 75, 40, ls="--")
+    ax.text(66.5, 38.5, "TX key", fontsize=6, color=GREY, ha="center", va="bottom")
     arrow(62, 31, 72, 31, ls="--")              # LNA key -> LNA
     ax.text(67, 32.3, "LNA key", fontsize=6, color=GREY, ha="center")
     box(26, 26, 14, 8, "EveRxSink\nmix down IF, RX NCO\n(+f_D residual),\ndecimate /32", fs=6.2)
