@@ -949,7 +949,8 @@ class EveApp(QtWidgets.QMainWindow):
             f"DSES Earth-Venus-Earth modem {__version__}\n\n"
             f"Waveform: ORI 'Spiral #2' by Pete Wyckoff, KA3WCA; reference implementation by Michelle Thompson "
             f"(Open Research Institute, GPL-3.0). We could not have done this without them.\n"
-            f"Station software and receiver: Rick Hambly, K0GD, Deep Space Exploration Society.\n\n"
+            f"Station software and receiver: Rick Hambly, K0GD, Deep Space Exploration Society.\n"
+            f"Supported by a grant from Amateur Radio Digital Communications.\n\n"
             f"Settings: {self.settings.path}"))
         self._help_dlg = None
         self._load()

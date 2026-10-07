@@ -136,6 +136,10 @@ every question. We could not have done this without them. The station hardware t
 software drives was built and measured by the DSES EVE team. The design document's
 Acknowledgments section says more.
 
+Supported by a grant from Amateur Radio Digital Communications. The DSES EVE-26 project, of which this
+modem is part, is funded by a 2026 grant from Amateur Radio Digital Communications (ARDC)
+to the Deep Space Exploration Society.
+
 ## For reviewers
 
 Start with `docs/DSES_EVE_Modem_Design_and_ICD.pdf`: sections 4 and 6 are the waveform and
