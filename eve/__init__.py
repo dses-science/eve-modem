@@ -8,7 +8,7 @@ gr_blocks.py and radio.py.
 Supported by a grant from Amateur Radio Digital Communications. (ARDC's 2026 grant to the Deep
 Space Exploration Society for EVE-26; Section 10 of the grant agreement.)
 """
-__version__ = "1.0.8"
+__version__ = "1.0.9"
 
 from .params import EveParams  # noqa: F401
 
