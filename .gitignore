@@ -4,6 +4,7 @@ __pycache__/
 ~$*
 *.eve.iq
 docs/*.docx
+docs/test_reports/*.docx
 
 # project-local conda env
 .conda/

@@ -32,6 +32,15 @@ $env:PATH = (Join-Path $eve 'Library\bin') + ';' + $env:PATH
     --version 'Rev C - DRAFT' `
     --header-logo $logo --force
 
+# Control-station integration test report (Engineering Report tier; test_reports/).
+& $py $gen (Join-Path $here 'test_reports\EVE_Modem_Station_Integration_Test.md') `
+    --pdf   (Join-Path $here 'test_reports\EVE_Modem_Station_Integration_Test.pdf') `
+    --docx  (Join-Path $here 'test_reports\EVE_Modem_Station_Integration_Test.docx') `
+    --title 'Earth-Venus-Earth Modem' `
+    --subtitle 'Control Station Integration Test Report' `
+    --version 'Rev A - DRAFT' `
+    --header-logo $logo --force
+
 # Release workflow (does not ship): stamped with the program version, like the
 # Workbench's own workflow PDF.
 $ver = (Select-String -Path (Join-Path $here '..\eve\__init__.py') `

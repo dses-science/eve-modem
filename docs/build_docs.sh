@@ -32,7 +32,10 @@ LOGO="$WB/reports/assets/DSES_Logo_Compact_Teal.png"
     --header-logo "$LOGO" --force
 
 # Operator's guide (same Markdown as the application's Help menu)
-"$PY" "$GEN" "$here/DSES_EVE_Modem_Operators_Guide.md"     --pdf "$here/DSES_EVE_Modem_Operators_Guide.pdf"     --docx "$here/DSES_EVE_Modem_Operators_Guide.docx"     --title 'Earth-Venus-Earth Modem' --subtitle "Operator's Guide"     --version 'Rev A - DRAFT' --header-logo "$LOGO" --force
+"$PY" "$GEN" "$here/DSES_EVE_Modem_Operators_Guide.md"     --pdf "$here/DSES_EVE_Modem_Operators_Guide.pdf"     --docx "$here/DSES_EVE_Modem_Operators_Guide.docx"     --title 'Earth-Venus-Earth Modem' --subtitle "Operator's Guide"     --version 'Rev C - DRAFT' --header-logo "$LOGO" --force
+
+# Control-station integration test report (Engineering Report tier; test_reports/)
+"$PY" "$GEN" "$here/test_reports/EVE_Modem_Station_Integration_Test.md"     --pdf   "$here/test_reports/EVE_Modem_Station_Integration_Test.pdf"     --docx  "$here/test_reports/EVE_Modem_Station_Integration_Test.docx"     --title 'Earth-Venus-Earth Modem'     --subtitle 'Control Station Integration Test Report'     --version 'Rev A - DRAFT'     --header-logo "$LOGO" --force
 
 # Release workflow (does not ship): stamped with the program version, like the
 # Workbench's own workflow PDF.

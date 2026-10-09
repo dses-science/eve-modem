@@ -1,0 +1,266 @@
+{
+  "session_id": "POUT-20261009-214819",
+  "started_utc": "2026-10-09T21:48:18Z",
+  "f_dial_hz": 1299500000.0,
+  "pad_db": 40.0,
+  "target_dbm": 37.0,
+  "radio": "B210 8003886: ref external/external locked=True; device time 1791582496.218 (last PPS 1791582496, set error +0.000000 s); rx 1504707.01 S/s @ 1299.500000 MHz gain 0 dB on A : RX2 (LO offset ok); tx 1504707.01 S/s @ 1299.500000 MHz gain 66 dB on A : TX/RX (LO offset ok)",
+  "gps": "out1 ON, out2 off, level 1 (16 mA, about +11.4 dBm); fin 4687500 Hz, N3 5 (f3 937500.0 Hz), N2 11x512 (fosc 5.280000 GHz), N1_HS 11, NC1 48, NC2 48 -> out1 10000000.000000 Hz, out2 10000000.000000 Hz; skew 0, bw 15 | locked True",
+  "keyer": "sequencer: USB relay board COM14 + B210 GPIO",
+  "dry_run": false,
+  "analyzer": {
+    "id": "HP8595E",
+    "center_hz": 1299500000.0,
+    "span_hz": 2000000.0,
+    "rbw_hz": 10000.0,
+    "vbw_hz": 10000.0,
+    "ref_level_dbm": 0.0,
+    "atten_db": 10.0,
+    "sweep_s": 0.06,
+    "units": "DBM",
+    "counter_on": false
+  },
+  "rows": [
+    {
+      "utc": "2026-10-09T21:48:25Z",
+      "tx_gain_db": 66.0,
+      "why": "sweep",
+      "marker_hz": 1299500000.0,
+      "marker_dbm": -11.93,
+      "pout_dbm": 28.07,
+      "pout_w": 0.6412095765851614,
+      "freq_error_hz": 0.0
+    },
+    {
+      "utc": "2026-10-09T21:48:32Z",
+      "tx_gain_db": 68.0,
+      "why": "sweep",
+      "marker_hz": 1299500000.0,
+      "marker_dbm": -10.32,
+      "pout_dbm": 29.68,
+      "pout_w": 0.9289663867799364,
+      "freq_error_hz": 0.0
+    },
+    {
+      "utc": "2026-10-09T21:48:38Z",
+      "tx_gain_db": 70.0,
+      "why": "sweep",
+      "marker_hz": 1299500100.0,
+      "marker_dbm": -8.94,
+      "pout_dbm": 31.060000000000002,
+      "pout_w": 1.276438808811345,
+      "freq_error_hz": 100.0
+    },
+    {
+      "utc": "2026-10-09T21:48:44Z",
+      "tx_gain_db": 72.0,
+      "why": "sweep",
+      "marker_hz": 1299500000.0,
+      "marker_dbm": -8.12,
+      "pout_dbm": 31.880000000000003,
+      "pout_w": 1.54170045294956,
+      "freq_error_hz": 0.0,
+      "compression": true
+    },
+    {
+      "utc": "2026-10-09T21:48:51Z",
+      "tx_gain_db": 74.0,
+      "why": "sweep",
+      "marker_hz": 1299500100.0,
+      "marker_dbm": -7.42,
+      "pout_dbm": 32.58,
+      "pout_w": 1.8113400926196026,
+      "freq_error_hz": 100.0,
+      "compression": true
+    },
+    {
+      "utc": "2026-10-09T21:48:57Z",
+      "tx_gain_db": 76.0,
+      "why": "sweep",
+      "marker_hz": 1299500100.0,
+      "marker_dbm": -6.9,
+      "pout_dbm": 33.1,
+      "pout_w": 2.0417379446695296,
+      "freq_error_hz": 100.0,
+      "compression": true
+    },
+    {
+      "utc": "2026-10-09T21:49:03Z",
+      "tx_gain_db": 78.0,
+      "why": "sweep",
+      "marker_hz": 1299500000.0,
+      "marker_dbm": -6.55,
+      "pout_dbm": 33.45,
+      "pout_w": 2.213094709605639,
+      "freq_error_hz": 0.0,
+      "compression": true
+    },
+    {
+      "utc": "2026-10-09T21:49:10Z",
+      "tx_gain_db": 80.0,
+      "why": "sweep",
+      "marker_hz": 1299500000.0,
+      "marker_dbm": -6.43,
+      "pout_dbm": 33.57,
+      "pout_w": 2.2750974307720715,
+      "freq_error_hz": 0.0,
+      "compression": true
+    }
+  ],
+  "verify": [],
+  "result": {
+    "stop_reason": "reached --stop"
+  },
+  "analyzer_found": {
+    "id": "HP8595E",
+    "center_hz": 3250000000.0,
+    "span_hz": 6500000000.0,
+    "rbw_hz": 3000000.0,
+    "vbw_hz": 1000000.0,
+    "ref_level_dbm": 0.0,
+    "atten_db": 10.0,
+    "sweep_s": 0.13,
+    "units": "DBM",
+    "counter_on": false
+  },
+  "finished_utc": "2026-10-09T21:49:14Z",
+  "steps": [
+    {
+      "t": 1791582498.8065863,
+      "utc": "2026-10-09T21:48:18.8Z",
+      "tx_gain_db": 66.0,
+      "scale_db": -3.0,
+      "signal": "cw",
+      "keyed": false,
+      "why": "start"
+    },
+    {
+      "t": 1791582501.768444,
+      "utc": "2026-10-09T21:48:21.8Z",
+      "tx_gain_db": 66.0,
+      "scale_db": -3.0,
+      "signal": "cw",
+      "keyed": true,
+      "why": "key down: power sweep"
+    },
+    {
+      "t": 1791582501.769523,
+      "utc": "2026-10-09T21:48:21.8Z",
+      "tx_gain_db": 66.0,
+      "scale_db": -3.0,
+      "signal": "cw",
+      "keyed": true,
+      "why": "level: sweep"
+    },
+    {
+      "t": 1791582508.1775887,
+      "utc": "2026-10-09T21:48:28.2Z",
+      "tx_gain_db": 68.0,
+      "scale_db": -3.0,
+      "signal": "cw",
+      "keyed": true,
+      "why": "level: sweep"
+    },
+    {
+      "t": 1791582514.5425878,
+      "utc": "2026-10-09T21:48:34.5Z",
+      "tx_gain_db": 70.0,
+      "scale_db": -3.0,
+      "signal": "cw",
+      "keyed": true,
+      "why": "level: sweep"
+    },
+    {
+      "t": 1791582520.9023838,
+      "utc": "2026-10-09T21:48:40.9Z",
+      "tx_gain_db": 72.0,
+      "scale_db": -3.0,
+      "signal": "cw",
+      "keyed": true,
+      "why": "level: sweep"
+    },
+    {
+      "t": 1791582527.2672176,
+      "utc": "2026-10-09T21:48:47.3Z",
+      "tx_gain_db": 74.0,
+      "scale_db": -3.0,
+      "signal": "cw",
+      "keyed": true,
+      "why": "level: sweep"
+    },
+    {
+      "t": 1791582533.621112,
+      "utc": "2026-10-09T21:48:53.6Z",
+      "tx_gain_db": 76.0,
+      "scale_db": -3.0,
+      "signal": "cw",
+      "keyed": true,
+      "why": "level: sweep"
+    },
+    {
+      "t": 1791582539.9828663,
+      "utc": "2026-10-09T21:48:59.0Z",
+      "tx_gain_db": 78.0,
+      "scale_db": -3.0,
+      "signal": "cw",
+      "keyed": true,
+      "why": "level: sweep"
+    },
+    {
+      "t": 1791582546.341931,
+      "utc": "2026-10-09T21:49:06.3Z",
+      "tx_gain_db": 80.0,
+      "scale_db": -3.0,
+      "signal": "cw",
+      "keyed": true,
+      "why": "level: sweep"
+    },
+    {
+      "t": 1791582553.058187,
+      "utc": "2026-10-09T21:49:13.1Z",
+      "tx_gain_db": 80.0,
+      "scale_db": -3.0,
+      "signal": "cw",
+      "keyed": false,
+      "why": "key up: sweep done"
+    }
+  ],
+  "log": [
+    "15:47:58 GPS clock: out1 ON, out2 off, level 1 (16 mA, about +11.4 dBm); fin 4687500 Hz, N3 5 (f3 937500.0 Hz), N2 11x512 (fosc 5.280000 GHz), N1_HS 11, NC1 48, NC2 48 -> out1 10000000.000000 Hz, out2 10000000.000000 Hz; skew 0, bw 15 | locked True",
+    "15:48:16 B210 8003886: ref external/external locked=True; device time 1791582496.218 (last PPS 1791582496, set error +0.000000 s); rx 1504707.01 S/s @ 1299.500000 MHz gain 0 dB on A : RX2 (LO offset ok); tx 1504707.01 S/s @ 1299.500000 MHz gain 66 dB on A : TX/RX (LO offset ok)",
+    "15:48:17 rate error +0.301 ppm; PPS verify True",
+    "15:48:18 USB relay on COM14 at 115200 baud: CH1:OFF CH2:OFF CH3:OFF CH4:OFF CH5:OFF CH6:OFF CH7:OFF CH8:OFF",
+    "15:48:18 key line: sequencer: USB relay board COM14 + B210 GPIO",
+    "15:48:18 8595E as found: HP8595E: centre 3250.000000 MHz, span 6500.000 MHz, RBW 3000 kHz, VBW 1000 kHz, ref +0.0 dBm, att 10 dB, sweep 130 ms",
+    "15:48:18 generator POUT-20261009-214819: CW at dial +0.000 kHz; TX gain 66.00 dB, scale -3.0 dB",
+    "15:48:21 8595E set for the measurement: HP8595E: centre 1299.500000 MHz, span 2.000 MHz, RBW 10 kHz, VBW 10 kHz, ref +0.0 dBm, att 10 dB, sweep 60 ms",
+    "15:48:21 KEY DOWN (power sweep): CW at dial +0.000 kHz, TX gain 66.00 dB, scale -3.0 dB",
+    "15:48:21 KEYED; stepping",
+    "15:48:21 level: TX gain 66.00 dB, scale -3.0 dB (sweep)",
+    "15:48:28 TX gain  66.0 dB: marker  -11.93 dBm at 1299.500000 MHz (+0 Hz) -> amplifier +28.07 dBm = 0.641 W",
+    "15:48:28 level: TX gain 68.00 dB, scale -3.0 dB (sweep)",
+    "15:48:34 TX gain  68.0 dB: marker  -10.32 dBm at 1299.500000 MHz (+0 Hz) -> amplifier +29.68 dBm = 0.929 W",
+    "15:48:34 level: TX gain 70.00 dB, scale -3.0 dB (sweep)",
+    "15:48:40 TX gain  70.0 dB: marker   -8.94 dBm at 1299.500100 MHz (+100 Hz) -> amplifier +31.06 dBm = 1.276 W",
+    "15:48:40 level: TX gain 72.00 dB, scale -3.0 dB (sweep)",
+    "15:48:47 TX gain  72.0 dB: marker   -8.12 dBm at 1299.500000 MHz (+0 Hz) -> amplifier +31.88 dBm = 1.542 W",
+    "15:48:47 compression noted: +2 dB of gain gave +0.8 dB of output; continuing (operator's OK)",
+    "15:48:47 level: TX gain 74.00 dB, scale -3.0 dB (sweep)",
+    "15:48:53 TX gain  74.0 dB: marker   -7.42 dBm at 1299.500100 MHz (+100 Hz) -> amplifier +32.58 dBm = 1.811 W",
+    "15:48:53 compression noted: +2 dB of gain gave +0.7 dB of output; continuing (operator's OK)",
+    "15:48:53 level: TX gain 76.00 dB, scale -3.0 dB (sweep)",
+    "15:48:59 TX gain  76.0 dB: marker   -6.90 dBm at 1299.500100 MHz (+100 Hz) -> amplifier +33.10 dBm = 2.042 W",
+    "15:48:59 compression noted: +2 dB of gain gave +0.5 dB of output; continuing (operator's OK)",
+    "15:48:59 level: TX gain 78.00 dB, scale -3.0 dB (sweep)",
+    "15:49:06 TX gain  78.0 dB: marker   -6.55 dBm at 1299.500000 MHz (+0 Hz) -> amplifier +33.45 dBm = 2.213 W",
+    "15:49:06 compression noted: +2 dB of gain gave +0.4 dB of output; continuing (operator's OK)",
+    "15:49:06 level: TX gain 80.00 dB, scale -3.0 dB (sweep)",
+    "15:49:12 TX gain  80.0 dB: marker   -6.43 dBm at 1299.500000 MHz (+0 Hz) -> amplifier +33.57 dBm = 2.275 W",
+    "15:49:12 compression noted: +2 dB of gain gave +0.1 dB of output; continuing (operator's OK)",
+    "15:49:12 sweep stopped: reached --stop",
+    "15:49:12 target power not bracketed within the sweep (see the rows)",
+    "15:49:13 key up (sweep done): 51.7 s keyed",
+    "15:49:13 key up; stopping the generator",
+    "15:49:13 generator stop (sweep done)"
+  ]
+}
