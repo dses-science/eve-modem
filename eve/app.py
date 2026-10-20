@@ -85,7 +85,7 @@ MODE_DEFAULTS = {
             "eme_chunk_s": 2.4, "eme_rtt_guard": 0.1, "eme_t_off_min": 0.5, "eme_t_on_max": 300.0, "eme_pa": False,
             "sky_mode": "monostatic", "sky_source": "auto", "sky_precomp": True, "sky_rx_doppler": False,
             "sky_start_now": True, "lead_s": 30.0},
-    "eve": {"keyer_kind": "TX key + LNA (USB relay board + B210 GPIO)", "variant": "B", "f_dial_mhz": 1299.5, "repeat": 5, "full_symbol": True, "pilot_frames": 40, "tx_gain": 55.0, "rx_gain": 45.0,
+    "eve": {"keyer_kind": "TX key + LNA (USB relay board + B210 GPIO)", "variant": "B", "f_dial_mhz": 1299.5, "repeat": 7, "full_symbol": True, "pilot_frames": 40, "tx_gain": 55.0, "rx_gain": 45.0,
             "sky_chunk_s": 240.0, "sky_rtt_guard": 30.0, "sky_t_on_max": 300.0, "sky_t_off_min": 240.0, "sky_pa": True,
             "sky_mode": "monostatic", "sky_source": "auto", "sky_precomp": True, "sky_rx_doppler": False,
             "sky_start_now": True, "lead_s": 60.0},
@@ -106,7 +106,8 @@ TIPS: Dict[str, str] = {
                 "pre-compensated, 2.5 s round trip: transmit a chunk, listen for its echo, repeat. The proof test "
                 "before Venus (design 4.6). Keying and the amplifier limits apply if a PA is in the chain.",
     "mode:eve": "Venus bounce. 272 s round trip on conjunction day: 240 s transmit chunks, then listen. A full "
-                "message is 30.2 minutes per pass; five passes are planned (design 4.1, 4.2). The amplifier limits "
+                "message is 30.2 minutes per pass; seven passes are planned, 8 h above 10 degrees (the 600 W operating "
+                "schedule of 2026-10-20; design 4.1, 4.2 planned five at 1200 W). The amplifier limits "
                 "are enforced regardless of the schedule.",
     "variant": "B: the DSES 23 cm monostatic waveform (1.5 Hz bins, 247 frames of 0.667 s), 1.1 dB more sensitive "
                "than A and the Venus and Moon default (design D13); the published link margins assume it; no ORI "
@@ -117,7 +118,7 @@ TIPS: Dict[str, str] = {
     "message": "Up to 11 ASCII characters (90 bits + CRC-16 -> BCH(127,106) -> 11 symbols of 12 bits). The Venus "
                "message is K0PRT K0PRT, the club call, never a personal call.",
     "repeat": "How many times the message is sent. The receiver adds the passes before deciding, so every extra pass "
-              "buys margin (about +3 dB per doubling). Venus plan: 5 passes; bench: 2.",
+              "buys margin (about +3 dB per doubling). Venus plan: 7 passes (8 h above 10 degrees); bench: 2.",
     "pilot": "Send pilot frames at the start of every chunk. The receiver uses them to measure the frequency offset "
              "and to confirm the epoch to a whole frame. Leave on unless a partner's file format forbids it.",
     "full_symbol": "Full length = the air interface: 473 frames per symbol (Variant A), 164.8 s per symbol, "
@@ -1757,8 +1758,8 @@ class EveApp(QtWidgets.QMainWindow):
                 self.w["sky_pa"].setChecked(True)
                 notes.append("amplifier limits on")
             if self.w["repeat"].value() < 2:
-                self.w["repeat"].setValue(5)
-                notes.append("repeat 5")
+                self.w["repeat"].setValue(7)
+                notes.append("repeat 7 (the Venus operating schedule)")
         if m in ("eme", "eve") and self.w["keyer_kind"].currentText() == "none":
             notes.append("NO KEY LINE selected: the sequencer will not be keyed (fine only for the bare-B210 EME test)")
         if self.w["keyer_kind"].currentText() != "none":

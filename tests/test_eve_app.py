@@ -161,6 +161,7 @@ def test_eme_defaults_fit_the_moon_chunk(tmp_path):
     win._set_defaults()
     cfg = win._values()
     assert cfg["variant"] == "B" and cfg["full_symbol"] is True and cfg["pilot"] and cfg["pilot_frames"] == 40
+    assert cfg["repeat"] == 7                                        # the 2026-10-20 operating schedule
     assert cfg["tx_gain"] == 55.0 and cfg["keyer_kind"] == "sequencer"
     select("siggen")
     win._set_defaults()

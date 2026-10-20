@@ -83,7 +83,7 @@ Every control has a tooltip: hover over it or its label. The essentials:
 | Signal generator | The B210 as a bench source for the RF package: CW, two tones, or the EVE waveform at the dial frequency, running until you stop it. You key and unkey through the sequencer as often as you like, and change the signal, the TX gain, and a digital scale while it runs, or step the gain on a timer. For power-out, compression, and tuning measurements on the 23 cm and 13 cm packages, and for checking the station's wiring to the relays with no RF at all. See section 4.6. |
 | Interop with a partner station | Compatibility test with ORI's own hardware and software, on the bench through a cable and attenuator or across the room: transmit only (their receiver decodes us) or receive only (their generator transmits, we archive and decode). No Doppler, no round trip, no amplifier limits. See section 7.1. |
 | EME | Moon bounce. Ephemeris from JPL Horizons, Doppler pre-compensated, transmit 2.4 s then listen for the 2.5 s echo, repeat. The rehearsal before Venus. |
-| EVE | Venus bounce. 240 s transmit chunks against the 272 s round trip. A full message is 30.2 minutes per pass; plan five passes. |
+| EVE | Venus bounce. 240 s transmit chunks against the 272 s round trip. A full message is 30.2 minutes per pass; plan seven passes, 8 hours above 10 degrees (the 2026-10-20 operating schedule at 600 W; five suffice at the full 1200 W). |
 
 **Set defaults for this run mode** puts every setting the mode cares about back to the
 design value: variant, frequency, repeat count, symbol length, gains, chunking, timing,
@@ -110,7 +110,8 @@ interop drops the pilot) and says so in the teal line under the run modes.
 - **Dial frequency**: 1299.5 MHz for Venus 2026 with the 23 cm package; 1296 on the
   bench. The comb sits 25 to 48.5 kHz above the dial.
 - **Message**: K0PRT K0PRT, the club call. Up to 11 characters.
-- **Repeat count**: passes of the message. The receiver adds them; five for Venus.
+- **Repeat count**: passes of the message. The receiver adds them; seven for Venus (the
+  operating schedule: about 8 hours, Venus above 10 degrees), five at the full 1200 W.
 - **Pilot**: a known tone for the first N frames of **every chunk**; the receiver measures
   the frequency offset on it and confirms the signal is there. The design value is 40
   frames (14 s) on the 240 s Venus chunk. Every chunk must hold the pilot plus two data
@@ -315,7 +316,8 @@ synchronization (pilot offset, tracker residual, sample gaps), and the key-event
    the dish on the Moon: the echo path,
    the Doppler pre-compensation, the sequencer, the LNA, and the gains. Expect the echo
    in the receive windows 2.5 s after each chunk.
-5. **Venus**: full length, five passes, start time from the session plan.
+5. **Venus**: full length, seven passes, start time from the operating schedule (Venus
+   reaches 10 degrees at Haswell about 14:20 UTC on 24 October).
 
 After every run, read the report before deciding the next step. Keep the archive folder;
 the raw windows can be decoded again later.
