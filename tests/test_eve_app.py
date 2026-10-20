@@ -134,7 +134,7 @@ def test_eme_defaults_fit_the_moon_chunk(tmp_path):
     # Variant B on the Moon (D13): the 2.4 s chunk holds three 0.667 s frames, one pilot + two data;
     # TX gain 55 dB on the air
     assert cfg["variant"] == "B" and cfg["pilot"] and cfg["pilot_frames"] == 1 and cfg["full_symbol"] is False
-    assert fits(cfg) and cfg["tx_gain"] == 55.0
+    assert fits(cfg) and cfg["tx_gain"] == 55.0 and cfg["keyer_kind"] == "sequencer"
     win.w["variant"].setCurrentText("A")        # Variant A: six frames per chunk
     # full length stays full on the Moon (the rules no longer flip it) and the pilot still fits
     win.w["full_symbol"].setChecked(True)
@@ -161,7 +161,10 @@ def test_eme_defaults_fit_the_moon_chunk(tmp_path):
     win._set_defaults()
     cfg = win._values()
     assert cfg["variant"] == "B" and cfg["full_symbol"] is True and cfg["pilot"] and cfg["pilot_frames"] == 40
-    assert cfg["tx_gain"] == 55.0
+    assert cfg["tx_gain"] == 55.0 and cfg["keyer_kind"] == "sequencer"
+    select("siggen")
+    win._set_defaults()
+    assert win._values()["keyer_kind"] == "sequencer"
     # interop is pinned to Variant A (ORI receivers implement A only)
     select("interop")
     win._set_defaults()

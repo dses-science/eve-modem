@@ -51,6 +51,10 @@ PREFIX = {"sim": "SIM", "bench": "BENCH", "siggen": "SIGGEN", "interop": "INTERO
 TARGET = {"sim": "sim", "bench": "bench", "siggen": "siggen", "interop": "partner", "eme": "moon", "eve": "venus"}
 FULL_FRAMES = {"A": 473, "B": 247, "MATLAB": 540}
 KEYER_KINDS = {"none": "none", "TX key + LNA (USB relay board + B210 GPIO)": "sequencer"}
+# highlighted Setup buttons (Rick, 2026-10-20): "Set defaults for this run mode" and "Save settings now"
+HIGHLIGHT_STYLE = (f"QPushButton {{ background: #e3f1f1; color: {TEAL}; border: 2px solid {TEAL}; "
+                   f"border-radius: 4px; font-weight: bold; padding: 6px; }} "
+                   f"QPushButton:hover {{ background: {TEAL}; color: white; }}")
 _LEGACY_KEYER_KINDS = {"B210 GPIO": "TX key + LNA (USB relay board + B210 GPIO)", "USB relay board": "TX key + LNA (USB relay board + B210 GPIO)"}   # settings from before 2026-09-23
 
 # "Set defaults" for a run mode: every setting the mode cares about goes to the design
@@ -62,7 +66,9 @@ MODE_DEFAULTS = {
             "sim_seed": 1, "bench_chunk_s": 2.4, "bench_t_off_min": 0.5, "lead_s": 12.0},
     "bench": {"f_dial_mhz": 1296.0, "repeat": 2, "full_symbol": False, "pilot_frames": 2, "tx_gain": 0.0, "rx_gain": 30.0,
               "bench_range_km": 0.15, "bench_chunk_s": 2.4, "bench_t_off_min": 0.5, "lead_s": 15.0},
-    "siggen": {"f_dial_mhz": 1296.0, "full_symbol": False, "tx_gain": 0.0, "siggen_signal": "CW", "siggen_offset_khz": 0.0,
+    # the live modes (Moon, Venus, signal generator into the RF package) default to the switching:
+    # the USB relay board + B210 GPIO sequencer (Rick, 2026-10-20: "keyline active")
+    "siggen": {"keyer_kind": "TX key + LNA (USB relay board + B210 GPIO)", "f_dial_mhz": 1296.0, "full_symbol": False, "tx_gain": 0.0, "siggen_signal": "CW", "siggen_offset_khz": 0.0,
                "siggen_spacing_khz": 10.0, "siggen_level_db": -3.0, "siggen_pa": False,
                "siggen_sim": False, "siggen_sweep": False, "siggen_sweep_start_db": 0.0, "siggen_sweep_stop_db": 60.0, "siggen_sweep_step_db": 5.0,
                "siggen_sweep_hold_s": 10.0, "lead_s": 15.0},
@@ -73,11 +79,11 @@ MODE_DEFAULTS = {
     # Variant B for the Moon and Venus (design D13: the DSES 23 cm monostatic waveform, +1.1 dB; the
     # published link margins assume it); the Moon chunk holds three B frames, so the pilot is 1 frame.
     # TX gain 55 dB on the air for the Moon and Venus (Rick, 2026-10-20)
-    "eme": {"variant": "B", "f_dial_mhz": 1296.0, "repeat": 2, "full_symbol": False, "pilot_frames": 1, "tx_gain": 55.0, "rx_gain": 40.0,
+    "eme": {"keyer_kind": "TX key + LNA (USB relay board + B210 GPIO)", "variant": "B", "f_dial_mhz": 1296.0, "repeat": 2, "full_symbol": False, "pilot_frames": 1, "tx_gain": 55.0, "rx_gain": 40.0,
             "eme_chunk_s": 2.4, "eme_rtt_guard": 0.1, "eme_t_off_min": 0.5, "eme_t_on_max": 300.0, "eme_pa": False,
             "sky_mode": "monostatic", "sky_source": "auto", "sky_precomp": True, "sky_rx_doppler": False,
             "sky_start_now": True, "lead_s": 30.0},
-    "eve": {"variant": "B", "f_dial_mhz": 1299.5, "repeat": 5, "full_symbol": True, "pilot_frames": 40, "tx_gain": 55.0, "rx_gain": 45.0,
+    "eve": {"keyer_kind": "TX key + LNA (USB relay board + B210 GPIO)", "variant": "B", "f_dial_mhz": 1299.5, "repeat": 5, "full_symbol": True, "pilot_frames": 40, "tx_gain": 55.0, "rx_gain": 45.0,
             "sky_chunk_s": 240.0, "sky_rtt_guard": 30.0, "sky_t_on_max": 300.0, "sky_t_off_min": 240.0, "sky_pa": True,
             "sky_mode": "monostatic", "sky_source": "auto", "sky_precomp": True, "sky_rx_doppler": False,
             "sky_start_now": True, "lead_s": 60.0},
@@ -1039,6 +1045,7 @@ class EveApp(QtWidgets.QMainWindow):
         self.mode_group.idClicked.connect(lambda _i: self._mode_changed(user=True))
         self.btn_defaults = QtWidgets.QPushButton("Set defaults for this run mode")
         self.btn_defaults.setToolTip(TIPS["set_defaults"])
+        self.btn_defaults.setStyleSheet(HIGHLIGHT_STYLE)      # the first thing to press after choosing a mode
         self.btn_defaults.clicked.connect(self._set_defaults)
         v.addWidget(self.btn_defaults)
         self.lbl_coherence = QtWidgets.QLabel("")
@@ -1456,6 +1463,7 @@ class EveApp(QtWidgets.QMainWindow):
         brow.addWidget(self.btn_abort)
         right.addLayout(brow)
         self.btn_save = QtWidgets.QPushButton("Save settings now")
+        self.btn_save.setStyleSheet(HIGHLIGHT_STYLE)
         self.btn_save.clicked.connect(self._save)
         right.addWidget(self.btn_save)
         self.setup_log = QtWidgets.QPlainTextEdit()

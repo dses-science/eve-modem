@@ -87,7 +87,8 @@ Every control has a tooltip: hover over it or its label. The essentials:
 
 **Set defaults for this run mode** puts every setting the mode cares about back to the
 design value: variant, frequency, repeat count, symbol length, gains, chunking, timing,
-Doppler.
+Doppler, and for the Moon, Venus and the signal generator the switching (the USB relay
+board and B210 GPIO sequencer).
 The status line lists what changed. Changing the run mode, the variant, the symbol length,
 or the interop direction also applies a few consistency rules (a sky session gets an
 external clock; Venus and interop get full-length symbols, Venus 1299.5 MHz and the
@@ -183,8 +184,9 @@ interop drops the pilot) and says so in the teal line under the run modes.
   the software simulation and the loopback bench included, so the relays can be watched
   and timed with nothing on the air (in the simulation the GPIO lines are recorded rather
   than driven). It needs 1.5 s of silence between chunks; the program raises the minimum
-  off time to that when the switching is on. Choosing none for an EME or Venus run is
-  allowed but the teal line warns.
+  off time to that when the switching is on. **Set defaults** selects the switching for
+  the Moon, Venus and the signal generator; choosing none afterwards for an EME or Venus
+  run is allowed but the teal line warns.
 
 ## 4.4 Mode settings
 
@@ -199,7 +201,10 @@ them only for a reason you can write in the log.
 **Preview schedule** builds the schedule without touching the radio and lists every
 chunk with its times, frames, round trip, elevation, and Doppler, then the total
 duration. For a sky session this fetches the ephemeris, which takes a few seconds. Check
-the elevation and the duration before Start.
+the elevation and the duration before Start. If the Moon or Venus is below the horizon at
+the start time, the preview warns and shows the next viable schedule instead, from the
+minute the target reaches 10 degrees; set that start time (untick *start now*) before
+Start, which still refuses a target below the horizon.
 
 **START** saves the settings, programs the GPS clock, opens the radio, builds the
 schedule, and switches to the Run tab. The first chunk starts after the lead time (15 s).

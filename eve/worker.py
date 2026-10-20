@@ -22,6 +22,7 @@ usable in-process (the tools and tests).
 from __future__ import annotations
 
 import json
+import math
 import os
 import threading
 import time
@@ -39,6 +40,7 @@ from .doppler import iso_utc
 
 PREFIX = {"sim": "SIM", "bench": "BENCH", "interop": "INTEROP", "eme": "EME", "eve": "EVE"}
 TARGET = {"sim": "sim", "bench": "bench", "interop": "partner", "eme": "moon", "eve": "venus"}
+PREVIEW_MIN_EL_DEG = 10.0     # a preview with the target below the horizon shifts to when it reaches this
 
 
 class Runner:
@@ -157,6 +159,24 @@ class Runner:
                 el = model.elevation_deg(t_start)
                 self.say(f"{target} at start: elevation {el:.1f} deg, RTT {model.rtt_s(t_start):.2f} s, "
                          f"Doppler {model.doppler_hz(t_start, f_dial):+.1f} Hz")
+                if el < 0 and preview_only:
+                    # Rick, 2026-10-20: keep the warning, but show the NEXT viable schedule
+                    t_next = self._next_viable_start(target, site, t_start, cfg["sky_source"])
+                    if t_next is None:
+                        raise RuntimeError(f"{target} is below the horizon at the start time (elevation {el:.1f} deg) "
+                                           f"and does not reach {PREVIEW_MIN_EL_DEG:.0f} deg within two days")
+                    msg = (f"{target} is below the horizon at the start time (elevation {el:.1f} deg). The preview "
+                           f"shows the next viable schedule, from {iso_utc(t_next, 0)} when {target} reaches "
+                           f"{PREVIEW_MIN_EL_DEG:.0f} deg; set that start time (untick 'start now') before running.")
+                    self.send(("notice", msg))
+                    self.say("NOTE: " + msg)
+                    t_start = t_next
+                    sid = f"{PREFIX[mode]}-{time.strftime('%Y%m%d-%H%M%S', time.gmtime(t_start))}"
+                    model = D.make_model(target, site, t_start - 1800, t_start + 8 * 3600, source=cfg["sky_source"],
+                                         table_path=None, step="1 m")
+                    el = model.elevation_deg(t_start)
+                    self.say(f"{target} at the shifted start: elevation {el:.1f} deg, RTT {model.rtt_s(t_start):.2f} s, "
+                             f"Doppler {model.doppler_hz(t_start, f_dial):+.1f} Hz")
                 if el < 0:
                     raise RuntimeError(f"{target} is below the horizon at the start time (elevation {el:.1f} deg)")
 
@@ -297,6 +317,19 @@ class Runner:
                     pass
             self.session = None
             self.send(("state", "idle"))
+
+    def _next_viable_start(self, target: str, site, t_from: float, source: str) -> Optional[float]:
+        """The first time after t_from when the target is at or above PREVIEW_MIN_EL_DEG, found on a
+        coarse two-day ephemeris (10 min steps, then refined to the minute); None if it never is."""
+        coarse = D.make_model(target, site, t_from, t_from + 2 * 86400.0, source=source, table_path=None, step="10 m")
+        t = float(t_from)
+        while t < t_from + 2 * 86400.0:
+            if coarse.elevation_deg(t) >= PREVIEW_MIN_EL_DEG:
+                while t - 60.0 > t_from and coarse.elevation_deg(t - 60.0) >= PREVIEW_MIN_EL_DEG:
+                    t -= 60.0
+                return 60.0 * math.ceil(t / 60.0)       # a whole minute
+            t += 600.0
+        return None
 
     def _run_generator(self, cfg: Dict, p, radio, f_dial: float, archive: Path, now: float, gps_text: str,
                        preview_only: bool) -> Dict:
