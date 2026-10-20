@@ -55,24 +55,26 @@ _LEGACY_KEYER_KINDS = {"B210 GPIO": "TX key + LNA (USB relay board + B210 GPIO)"
 
 # "Set defaults" for a run mode: every setting the mode cares about goes to the design
 # value (the design document's numbers; bench values from the 2026-09-11/12 loopback).
-COMMON_DEFAULTS = {"variant": "A", "message": "K0PRT K0PRT", "pilot": True, "n_frames_test": 6, "pilot_frames_test": 2,
+COMMON_DEFAULTS = {"variant": "A", "message": "K0PRT K0PRT", "pilot": True, "n_frames_test": 6,
                    "clock": "external", "time_host": False, "gpsdo": True, "lo_offset_khz": -300.0, "serial": ""}
 MODE_DEFAULTS = {
-    "sim": {"f_dial_mhz": 1296.0, "repeat": 1, "full_symbol": False, "sim_cn0": 20.0, "sim_range_km": 375000.0,
+    "sim": {"f_dial_mhz": 1296.0, "repeat": 1, "full_symbol": False, "pilot_frames": 2, "sim_cn0": 20.0, "sim_range_km": 375000.0,
             "sim_seed": 1, "bench_chunk_s": 2.4, "bench_t_off_min": 0.5, "lead_s": 12.0},
-    "bench": {"f_dial_mhz": 1296.0, "repeat": 2, "full_symbol": False, "tx_gain": 0.0, "rx_gain": 30.0,
+    "bench": {"f_dial_mhz": 1296.0, "repeat": 2, "full_symbol": False, "pilot_frames": 2, "tx_gain": 0.0, "rx_gain": 30.0,
               "bench_range_km": 0.15, "bench_chunk_s": 2.4, "bench_t_off_min": 0.5, "lead_s": 15.0},
     "siggen": {"f_dial_mhz": 1296.0, "full_symbol": False, "tx_gain": 0.0, "siggen_signal": "CW", "siggen_offset_khz": 0.0,
                "siggen_spacing_khz": 10.0, "siggen_level_db": -3.0, "siggen_pa": False,
                "siggen_sim": False, "siggen_sweep": False, "siggen_sweep_start_db": 0.0, "siggen_sweep_stop_db": 60.0, "siggen_sweep_step_db": 5.0,
                "siggen_sweep_hold_s": 10.0, "lead_s": 15.0},
-    "interop": {"f_dial_mhz": 1296.0, "repeat": 1, "full_symbol": True, "tx_gain": 30.0, "rx_gain": 30.0,
+    "interop": {"f_dial_mhz": 1296.0, "repeat": 1, "full_symbol": True, "pilot_frames": 40, "tx_gain": 30.0, "rx_gain": 30.0,
                 "interop_chunk_s": 300.0, "interop_search_frames": 30, "sky_start_now": True, "lead_s": 30.0},
-    "eme": {"f_dial_mhz": 1296.0, "repeat": 2, "full_symbol": True, "tx_gain": 0.0, "rx_gain": 40.0,
+    # EME: test length first (guide section 9, step 4) and a 2-frame pilot: the 2.4 s Moon chunk
+    # holds six Variant A frames, so the design's 40-frame pilot can never fit it (found 2026-10-19)
+    "eme": {"f_dial_mhz": 1296.0, "repeat": 2, "full_symbol": False, "pilot_frames": 2, "tx_gain": 0.0, "rx_gain": 40.0,
             "eme_chunk_s": 2.4, "eme_rtt_guard": 0.1, "eme_t_off_min": 0.5, "eme_t_on_max": 300.0, "eme_pa": False,
             "sky_mode": "monostatic", "sky_source": "auto", "sky_precomp": True, "sky_rx_doppler": False,
             "sky_start_now": True, "lead_s": 30.0},
-    "eve": {"f_dial_mhz": 1299.5, "repeat": 5, "full_symbol": True, "tx_gain": 0.0, "rx_gain": 45.0,
+    "eve": {"f_dial_mhz": 1299.5, "repeat": 5, "full_symbol": True, "pilot_frames": 40, "tx_gain": 0.0, "rx_gain": 45.0,
             "sky_chunk_s": 240.0, "sky_rtt_guard": 30.0, "sky_t_on_max": 300.0, "sky_t_off_min": 240.0, "sky_pa": True,
             "sky_mode": "monostatic", "sky_source": "auto", "sky_precomp": True, "sky_rx_doppler": False,
             "sky_start_now": True, "lead_s": 60.0},
@@ -103,14 +105,17 @@ TIPS: Dict[str, str] = {
                "message is K0PRT K0PRT, the club call, never a personal call.",
     "repeat": "How many times the message is sent. The receiver adds the passes before deciding, so every extra pass "
               "buys margin (about +3 dB per doubling). Venus plan: 5 passes; bench: 2.",
-    "pilot": "Send pilot frames before each pass. The receiver uses them to measure the frequency offset and to "
-             "confirm the epoch to a whole frame. Leave on unless a partner's file format forbids it.",
+    "pilot": "Send pilot frames at the start of every chunk. The receiver uses them to measure the frequency offset "
+             "and to confirm the epoch to a whole frame. Leave on unless a partner's file format forbids it.",
     "full_symbol": "Full length = the air interface: 473 frames per symbol (Variant A), 164.8 s per symbol, "
                    "30.2 min per message pass. Untick for a short TEST symbol that runs in seconds; a test-length "
                    "signal has no on-air meaning and a partner could not decode it.",
     "n_frames_test": "Frames per symbol for a TEST run. Each frame is 0.348 s (Variant A). 6 frames = 2.1 s per symbol, "
                      "23 s per message pass; the bench default.",
-    "pilot_frames_test": "Pilot frames per pass for a TEST run (the full-length pilot is 40 frames).",
+    "pilot_frames": "Pilot frames at the start of EVERY chunk. The design value is 40 (14 s) on the 240 s Venus chunk. "
+                    "A chunk must hold the pilot plus two data frames, so the Moon's 2.4 s chunk (six frames) allows "
+                    "four at most; the program caps the setting and says so. Use 2 on the Moon and on the bench: two "
+                    "frames are a decisive check at EME strength, and every pilot frame on the Moon displaces a data frame.",
     "serial": "B210 serial number, or blank for the first B2xx found on USB. The Haswell radio and the bench clone "
               "have different serials; set it when both are plugged in.",
     "tx_gain": "B210 transmit gain, 0 to 89.75 dB. 0 dB for the loopback bench (the leakage is enough). On the air the "
@@ -231,7 +236,7 @@ class Settings:
     """Typed access to the INI file. Keys are the form fields; defaults live here."""
     DEFAULTS: Dict[str, object] = {
         "mode": "bench", "variant": "A", "f_dial_mhz": 1296.0, "message": "K0PRT K0PRT", "repeat": 2,
-        "pilot": True, "full_symbol": False, "n_frames_test": 6, "pilot_frames_test": 2,
+        "pilot": True, "full_symbol": False, "n_frames_test": 6, "pilot_frames": 2,
         "serial": "", "tx_gain": 0.0, "rx_gain": 30.0, "clock": "external", "time_host": False,
         "gpsdo": True, "lo_offset_khz": -300.0, "archive": "archive_app",
         "tx_port": "A", "rx_port": "A : RX2",
@@ -1059,8 +1064,17 @@ class EveApp(QtWidgets.QMainWindow):
         sp.setRange(1, 12)
         sp.setToolTip("passes of the message; the receiver combines them (design 4.5)")
         f.addRow("Repeat count", sp)
-        self.w["pilot"] = ck = QtWidgets.QCheckBox("pilot frames before each pass")
-        f.addRow("Pilot", ck)
+        pilotrow = QtWidgets.QHBoxLayout()
+        self.w["pilot"] = ck = QtWidgets.QCheckBox("pilot frames at the start of every chunk:")
+        ck.toggled.connect(lambda _b: self._coherence())
+        pilotrow.addWidget(ck)
+        self.w["pilot_frames"] = sp = QtWidgets.QSpinBox()
+        sp.setRange(1, 200)
+        sp.setSuffix(" frames")
+        sp.valueChanged.connect(lambda _v: self._coherence())
+        pilotrow.addWidget(sp)
+        pilotrow.addStretch(1)
+        f.addRow("Pilot", pilotrow)
         symrow = QtWidgets.QHBoxLayout()
         self.w["full_symbol"] = ck = QtWidgets.QCheckBox("full length")
         ck.setToolTip("473 frames per symbol (Variant A) = 164.8 s; a message is 30.2 min per pass. Untick for a short TEST symbol.")
@@ -1072,11 +1086,6 @@ class EveApp(QtWidgets.QMainWindow):
         sp.setSuffix(" frames")
         sp.setToolTip("frames per symbol for a short test (6 = 2.1 s per symbol, 23 s per message pass)")
         sp.valueChanged.connect(lambda _v: self._symbol_changed())
-        symrow.addWidget(sp)
-        symrow.addWidget(QtWidgets.QLabel("pilot"))
-        self.w["pilot_frames_test"] = sp = QtWidgets.QSpinBox()
-        sp.setRange(1, 200)
-        sp.setSuffix(" frames")
         symrow.addWidget(sp)
         symrow.addStretch(1)
         f.addRow("Symbol length", symrow)
@@ -1481,6 +1490,15 @@ class EveApp(QtWidgets.QMainWindow):
         the coherence rules are held off while loading."""
         self._loading = True
         s = self.settings
+        # 1.0.10: the pilot length is its own setting in every mode. An INI from before it
+        # carries pilot_frames_test, which applied at test length only: keep that run's
+        # pilot as it was (the design's 40 frames at full length).
+        if not s.q.contains("pilot_frames") and s.q.contains("pilot_frames_test"):
+            try:
+                old = int(s.q.value("pilot_frames_test"))
+            except (TypeError, ValueError):
+                old = 2
+            s.set("pilot_frames", EveParams.named(s.get("variant")).pilot_frames if s.get("full_symbol") else old)
         mode = s.get("mode")
         for b in self.mode_group.buttons():
             b.setChecked(b.property("mode") == mode)
@@ -1677,17 +1695,32 @@ class EveApp(QtWidgets.QMainWindow):
         notes: List[str] = []
         v = self.w["variant"].currentText()
         p = EveParams.named(v)
-        # chunks must hold the pilot plus data (bench, sim, interop use the bench chunk)
+        # every chunk must hold the pilot plus two data frames (the worker refuses otherwise,
+        # worker.py). Bench, sim and interop chunks are free: raise the chunk. A sky chunk is
+        # bounded by the round trip (the Moon's 2.4 s holds six Variant A frames): cap the
+        # pilot instead, the way the planner counts frames (floor(chunk x R_bw), schedule.py).
         if self.w["pilot"].isChecked():
-            need_s = (int(self.w["pilot_frames_test"].value()) + 2) / p.r_bw if not self.w["full_symbol"].isChecked() else (p.pilot_frames + 2) / p.r_bw
+            n_pilot = int(self.w["pilot_frames"].value())
+            need_s = (n_pilot + 2) / p.r_bw
             for key in (("bench_chunk_s",) if m in ("bench", "sim") else ("interop_chunk_s",) if m == "interop" else ()):
                 if self.w[key].value() < need_s:
                     self.w[key].setValue(math.ceil(need_s * 10 - 1e-9) / 10.0)
                     notes.append(f"chunk raised to {self.w[key].value():.1f} s (Variant {v}: {p.t_frame:.3f} s frames, pilot + 2)")
+            key, label = ("eme_chunk_s", "Moon") if m == "eme" else ("sky_chunk_s", "Venus") if m == "eve" else ("", "")
+            if key:
+                chunk_s = self.w[key].value()
+                n_max = int(math.floor(chunk_s * p.r_bw + 1e-9)) - 2
+                if n_pilot > n_max >= 1:
+                    self.w["pilot_frames"].setValue(n_max)
+                    notes.append(f"pilot {n_max} frames: the {label} chunk of {chunk_s:.1f} s holds {n_max + 2} frames "
+                                 f"of {p.t_frame:.3f} s and two must carry data")
+                elif n_pilot > n_max:
+                    self.w["pilot"].setChecked(False)
+                    notes.append(f"pilot off: the {label} chunk of {chunk_s:.1f} s has no room for a pilot and two data frames")
+        if m in ("eve", "interop") and not self.w["full_symbol"].isChecked():
+            self.w["full_symbol"].setChecked(True)          # EME starts at test length (guide 9, step 4)
+            notes.append("full-length symbols (the air interface)")
         if m in ("eme", "eve", "interop"):
-            if not self.w["full_symbol"].isChecked():
-                self.w["full_symbol"].setChecked(True)
-                notes.append("full-length symbols (the air interface)")
             if self.w["clock"].currentText() == "internal":
                 self.w["clock"].setCurrentText("external")
                 notes.append("clock source external (no internal reference on the air)")
@@ -1775,8 +1808,7 @@ class EveApp(QtWidgets.QMainWindow):
         self.lbl_sym.setText(f"{n} frames per symbol = {t_sym:.1f} s; one message pass = {t_sym * p.n_sym / 60:.1f} min; "
                              f"decodes above about {thr:+.1f} dB-Hz C/N0 in one pass"
                              + ("" if full else f"   (TEST length: no on-air significance; full length {cn0_threshold_db(v, n_full):+.1f} dB-Hz)"))
-        for key in ("n_frames_test", "pilot_frames_test"):
-            self.w[key].setEnabled(not full)
+        self.w["n_frames_test"].setEnabled(not full)
 
     def _ports_changed(self) -> None:
         """TX frontend or RX port changed: warn in red when the receive port is the

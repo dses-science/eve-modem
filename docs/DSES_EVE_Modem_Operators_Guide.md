@@ -4,8 +4,8 @@
 | | |
 |---|---|
 | Document | DSES EVE Modem Operator's Guide |
-| Revision | Rev C — DRAFT (program 1.0.9) |
-| Date | 2026-10-07 |
+| Revision | Rev C — DRAFT (program 1.0.10) |
+| Date | 2026-10-20 |
 | Prepared by | Rick Hambly, K0GD, Deep Space Exploration Society |
 | Funding | Supported by a grant from Amateur Radio Digital Communications. |
 | Companion | DSES EVE Modem Design Description and ICD (Rev C): the why behind every setting |
@@ -88,10 +88,11 @@ Every control has a tooltip: hover over it or its label. The essentials:
 **Set defaults for this run mode** puts every setting the mode cares about back to the
 design value: frequency, repeat count, symbol length, gains, chunking, timing, Doppler.
 The status line lists what changed. Changing the run mode, the variant, the symbol length,
-or the interop direction also applies a few consistency rules (a sky session gets
-full-length symbols and an external clock, Venus gets 1299.5 MHz and the amplifier
-limits, a Variant B chunk grows to hold the pilot, receive-only interop drops the pilot)
-and says so in the teal line under the run modes.
+or the interop direction also applies a few consistency rules (a sky session gets an
+external clock; Venus and interop get full-length symbols, Venus 1299.5 MHz and the
+amplifier limits; EME starts at test length; a bench or interop chunk grows to hold the
+pilot, and on the Moon or Venus the pilot is capped to what the chunk holds; receive-only
+interop drops the pilot) and says so in the teal line under the run modes.
 
 ## 4.2 Waveform and message
 
@@ -101,6 +102,13 @@ and says so in the teal line under the run modes.
   bench. The comb sits 25 to 48.5 kHz above the dial.
 - **Message**: K0PRT K0PRT, the club call. Up to 11 characters.
 - **Repeat count**: passes of the message. The receiver adds them; five for Venus.
+- **Pilot**: a known tone for the first N frames of **every chunk**; the receiver measures
+  the frequency offset on it and confirms the signal is there. The design value is 40
+  frames (14 s) on the 240 s Venus chunk. Every chunk must hold the pilot plus two data
+  frames, so the Moon's 2.4 s chunk (six frames) allows four at most; the program caps
+  the setting and says so. Use 2 on the Moon and on the bench: two frames are a decisive
+  check at EME strength, and every pilot frame on the Moon displaces a data frame (a
+  2-frame pilot makes a full-length Moon pass half again as long).
 - **Symbol length**: **full length** (473 frames, 164.8 s per symbol) is the air
   interface. The **test length** (6 frames, 2.1 s) makes a whole message pass in 23 s
   for bench work. The program warns before sending a test-length signal on the air.
@@ -283,7 +291,8 @@ synchronization (pilot offset, tracker residual, sample gaps), and the key-event
    two minutes. Both passes should decode at 20 dB or more of margin.
 3. **Bench loopback, full length, one pass** (34 minutes): proves the long streams with
    no underruns and the amplifier-limit chunking at real length. Run it once per PC.
-4. **EME**, test length first, then full length, with the dish on the Moon: the echo path,
+4. **EME**, test length first, then full length, pilot 2 frames (the EME defaults), with
+   the dish on the Moon: the echo path,
    the Doppler pre-compensation, the sequencer, the LNA, and the gains. Expect the echo
    in the receive windows 2.5 s after each chunk.
 5. **Venus**: full length, five passes, start time from the session plan.
@@ -323,7 +332,8 @@ about −20 dBm at RX2, so 30 to 40 dB of attenuation between two radios on the 
 | 'O' or overflows in the log | The PC dropped receive samples. One short overflow at start-up is known and padded; repeated ones mean the PC is too busy: close other programs, use a direct USB 3 port. The archive records every gap. |
 | Blank tone strip during a receive window | No signal or wrong RX gain. On the bench check TX gain 0 and nothing on the antenna ports; on the air check the LNA and the sequencer. |
 | Decisions wrong on the bench | Reference unlocked (frequency off), or the LO offset fell back (the radio line says so). Do not go on the air until the bench decodes. |
-| "a chunk of N frames cannot hold the pilot frames plus data" | The chunk is too short for the pilot. Variant B frames are 0.667 s, so the 2.4 s bench chunk holds three frames and two are pilot: use a chunk of 4 s or more for Variant B (the message says the minimum). |
+| "a chunk of N frames cannot hold the pilot frames plus data" | The chunk is too short for the pilot. Bench and interop chunks are raised by the program; on the Moon the 2.4 s chunk holds six Variant A frames (three of Variant B), so the pilot is capped at four (one), and a chunk shortened afterwards may need the pilot set again. Variant B on the bench: use a chunk of 4 s or more (the message says the minimum). |
+| "the run worker stopped without a result" | The run process ended without reporting. Read the last lines of `app.log` before it (section 3 names the log folder). Before 1.0.10 a full-length sky schedule could trip a timestamp rounding fault in the program itself (one timestamp in a thousand written a second early; fixed), and the message appeared while the worker was in fact still running. |
 | "chunk would hold no frames" | The chunk settings leave no room between the round trip and the guard. Restore the mode's defaults. |
 | Horizons unreachable | The ephemeris source falls back to astropy with the local DE440s. The Doppler differs by up to 10 Hz at 13 cm; acceptable, but note it in the log. |
 | "the run worker died while opening the radio ... retrying" | Every run lives in its own worker process, and opening the B210 faults about one time in seven on Windows (a UHD fault, not the radio). The program retries the open up to three times by itself; the log shows each try. If all three fail, power-cycle the B210 (USB and DC off for 15 s) and Start again. The window never closes because of it. |

@@ -82,7 +82,12 @@ class Runner:
             mode = cfg["mode"]
             p = EveParams.named(cfg["variant"])
             if not cfg["full_symbol"]:
-                p = replace(p, n_frames=int(cfg["n_frames_test"]), pilot_frames=int(cfg["pilot_frames_test"]))
+                p = replace(p, n_frames=int(cfg["n_frames_test"]))
+            # the pilot length is its own setting, per chunk, in every mode (1.0.10); a config
+            # from before carries pilot_frames_test, which applied at test length only
+            n_pilot = cfg.get("pilot_frames", None if cfg["full_symbol"] else cfg.get("pilot_frames_test"))
+            if n_pilot is not None:
+                p = replace(p, pilot_frames=int(n_pilot))
             f_dial = float(cfg["f_dial_mhz"]) * 1e6
             archive = Path(cfg["archive"])
             archive.mkdir(parents=True, exist_ok=True)
