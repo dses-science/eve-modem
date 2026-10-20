@@ -160,6 +160,7 @@ class SessionReport:
     aborted: bool = False
     abort_reason: str = ""
     notes: List[str] = field(default_factory=list)
+    tx_events: Dict = field(default_factory=dict)      # underflow / late / seq_error counts (EveRadio)
 
 
 class Session:
@@ -358,6 +359,7 @@ class Session:
             rx_in = self.radio.build_channel(tb, self.tone, rtt)
         elif opts.tx_enabled:
             tb.connect(self.tone, self.radio.tx)
+            getattr(self.radio, "connect_tx_events", lambda _tb: None)(tb)
             rx_in = self.radio.rx.block
         else:
             tb.connect(self.tone, blocks.null_sink(gr.sizeof_gr_complex))   # keeps the frame clock, sends nothing
@@ -464,6 +466,14 @@ class Session:
         if self.tone is not None:
             self.report.tone_samples_on = int(self.tone.samples_on)
             self.report.frames_sent = len(self.tone.frames_sent)
+        ev = dict(getattr(self.radio, "tx_event_counts", lambda: {})() or {})
+        if ev:
+            self.report.tx_events = ev
+            from .report import tx_events_text
+            warn = tx_events_text(ev)
+            if warn:
+                self.report.notes.append(warn)
+                self.log("WARNING: " + warn)
         if self.acc is not None and self.opts.live_decode and self.acc.acc:
             out = self.acc.decode()
             self.report.live_decode = {"ok": out.ok, "text": out.text, "symbols": out.symbols,

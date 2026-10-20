@@ -115,6 +115,7 @@ class EveRadio:
         self.cfg = cfg or RadioConfig()
         self.rx = None          # dses_radio.UhdB200Source
         self.tx = None          # uhd.usrp_sink
+        self.tx_events = None   # gr_blocks.TxEventCounter, fed by the sink's async_msgs port
         self.rx_rate = 0.0
         self.tx_rate = 0.0
         self.rx_lo_ok = False
@@ -150,6 +151,8 @@ class EveRadio:
                                   antenna=cfg.rx_antenna, stream_args=cfg.rx_stream_args)
         self.tx = R.make_usrp_sink(cfg.serial, rate, cfg.f_dial_hz, cfg.tx_gain_db,
                                    antenna=cfg.tx_antenna, lo_offset_hz=0.0)
+        from .gr_blocks import TxEventCounter
+        self.tx_events = TxEventCounter()
         self._tx_frontend = "A"
         self._set_tx_frontend(cfg.tx_frontend)
 
@@ -289,6 +292,21 @@ class EveRadio:
     def key_readback(self) -> bool:
         """Read the GPIO bank back and report whether the transmitter line (GPIO_0) is high."""
         return bool(R.gpio_read(self.rx.block, self.cfg.key_bank) & 0x01)
+
+    # ---- transmit events ---------------------------------------------------------------------
+    def connect_tx_events(self, tb) -> None:
+        """Wire the sink's "async_msgs" port to the event counter; the session that owns the
+        flowgraph calls this right after connecting the tone source to the sink."""
+        if self.tx is None or self.tx_events is None:
+            return
+        try:
+            tb.msg_connect((self.tx, "async_msgs"), (self.tx_events, "in"))
+        except Exception as e:      # noqa: BLE001
+            self.log(f"transmit event counter not connected: {e}")
+
+    def tx_event_counts(self) -> Dict[str, int]:
+        """underflow / late / seq_error / other counts since the radio was created ({} before)."""
+        return self.tx_events.snapshot() if self.tx_events is not None else {}
 
     # ---- status ------------------------------------------------------------------------------
     def status_text(self) -> str:

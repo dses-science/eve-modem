@@ -458,3 +458,60 @@ class EveRxSink(gr.sync_block):
                 "gap_events": self.gap_events, "gap_samples": self.gap_samples,
                 "time_tags": self.time_tags, "files": {ci: str(f["path"]) for ci, f in self._files.items()},
                 "first_time": self.first_time}
+
+
+class TxEventCounter(gr.basic_block):
+    """Counts the usrp_sink's asynchronous transmit events. gr-uhd publishes them on the
+    sink's "async_msgs" message port as a pair (metadata dict, value dict) whose value
+    carries "event_code": a list of symbols among burst_ack, underflow, seq_error,
+    time_error, underflow_in_packet, seq_error_in_burst. A time_error is a LATE PACKET:
+    timed samples that reached the radio after their slot and were dropped (UHD prints
+    'L' for each). Counted here: underflow (both kinds), late (time_error), seq_error
+    (both kinds), other (anything unparsable); burst_ack is ignored. The counts feed the
+    operator warning (report.tx_events_text) on the Run tab, in the log and in the report.
+
+    Why: on the Haswell Raspberry Pi 5 (2026-10-20) Variant A's 1.5 MS/s comb could not be
+    generated in time; symbol 0 decoded from the pre-buffered first chunk and symbols 1-10
+    were never on the air, with nothing in the GUI to say so."""
+
+    def __init__(self):
+        gr.basic_block.__init__(self, name="eve_tx_events", in_sig=None, out_sig=None)
+        self.message_port_register_in(pmt.intern("in"))
+        self.set_msg_handler(pmt.intern("in"), self._on_msg)
+        self._lock = threading.Lock()
+        self.counts: Dict[str, int] = {"underflow": 0, "late": 0, "seq_error": 0, "other": 0}
+        self.last_t: Optional[float] = None
+
+    def _on_msg(self, msg) -> None:
+        codes: List[str] = []
+        try:
+            d = pmt.cdr(msg) if pmt.is_pair(msg) else msg
+            if pmt.is_dict(d):
+                v = pmt.dict_ref(d, pmt.intern("event_code"), pmt.PMT_NIL)
+                if pmt.is_symbol(v):
+                    codes = [pmt.symbol_to_string(v)]
+                while pmt.is_pair(v):                 # a pmt list: walk car/cdr (to_python
+                    x = pmt.car(v)                    # would hand back nested tuples)
+                    if pmt.is_symbol(x):
+                        codes.append(pmt.symbol_to_string(x))
+                    v = pmt.cdr(v)
+        except Exception:        # noqa: BLE001
+            codes = []
+        with self._lock:
+            if not codes:
+                self.counts["other"] += 1
+            for c in codes:
+                if c in ("underflow", "underflow_in_packet"):
+                    self.counts["underflow"] += 1
+                elif c == "time_error":
+                    self.counts["late"] += 1
+                elif c in ("seq_error", "seq_error_in_burst"):
+                    self.counts["seq_error"] += 1
+                elif c != "burst_ack":
+                    self.counts["other"] += 1
+            self.last_t = time.time()
+
+    def snapshot(self) -> Dict[str, int]:
+        """A copy of the counts (thread-safe)."""
+        with self._lock:
+            return dict(self.counts)

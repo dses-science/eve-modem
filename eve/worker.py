@@ -429,8 +429,10 @@ class Runner:
     def _status_loop(self, sess, radio, model, sched, stop: threading.Event, gps_text: str) -> None:
         """Half-second status for the panel: phase, key, radio text, ephemeris; abort polls."""
         from . import gpsdo as _gpsdo
+        from .report import tx_events_text
         g = None
         g_absent = False
+        tx_warned = False
         n = 0
         while not stop.is_set():
             if self.poll_commands is not None and hasattr(sess, "set_level"):
@@ -465,6 +467,18 @@ class Runner:
                     d["radio"] = getattr(radio, "status_text", lambda: "radio")()
             except Exception as e:      # noqa: BLE001
                 d["radio"] = f"radio status unavailable: {e}"
+            # transmit underflows / late packets: the radio line carries the warning, the
+            # operator gets one notice box, the log one line (2026-10-20, Raspberry Pi 5)
+            ev = getattr(radio, "tx_event_counts", lambda: {})()
+            if ev:
+                d["tx_events"] = ev
+                warn = tx_events_text(ev)
+                if warn and "radio" in d:
+                    d["radio"] = d["radio"] + "\n" + warn
+                if warn and not tx_warned:
+                    tx_warned = True
+                    self.send(("notice", warn))
+                    self.say("WARNING: " + warn)
             if n % 4 == 0 and gps_text and not g_absent:
                 try:
                     if g is None:

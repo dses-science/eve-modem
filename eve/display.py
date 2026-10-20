@@ -564,6 +564,8 @@ class OperatorPanel(QtWidgets.QWidget):
                             f"PLL {'LOCK' if st.pll_lock else 'no lock'}, signal losses {st.loss_count}")
             except Exception as e:
                 txt += f"\nGPS clock: {e}"
+        self.lbl_radio.setStyleSheet(mono() + (" font-size: 11px; color: #c0392b; font-weight: bold;"
+                                               if "TRANSMITTER UNDERRAN" in txt else " font-size: 11px;"))
         self.lbl_radio.setText(txt)
         eph_remote = getattr(self.session, "eph_text", None)
         if eph_remote is not None:

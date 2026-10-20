@@ -37,6 +37,22 @@ def _page(title: str, subtitle: str) -> Figure:
     return fig
 
 
+def tx_events_text(counts: Dict) -> str:
+    """The operator warning for the transmit event counts (gr_blocks.TxEventCounter: underflows,
+    late packets, sequence errors), or '' when there were none. One text for the Run tab, the
+    log, the notice box and the report. Found 2026-10-20 on the Haswell Raspberry Pi 5: Variant
+    A's 1.5 MS/s underran the transmitter, 36,469 late packets, symbols 1-10 never sent."""
+    u = int(counts.get("underflow", 0))
+    late = int(counts.get("late", 0))
+    seq = int(counts.get("seq_error", 0))
+    if u + late + seq == 0:
+        return ""
+    return (f"TRANSMITTER UNDERRAN: {u} underflows, {late} late packets, {seq} sequence errors. The host could not "
+            "deliver the transmit samples in time, so chunks went out late or empty and the receiver saw noise. "
+            "Variant A streams 1.5 MS/s, Variant B 786 kS/s: the Raspberry Pi 5 manages B, not A. On any PC close "
+            "other programs and use a direct USB 3 port.")
+
+
 def _mono(fig: Figure, x: float, y: float, lines: List[str], size: float = 8.0, dy: float = 0.0148) -> float:
     """Write `lines` in monospace from (x, y) downward (figure fractions), `dy` per line;
     returns the y below the last line."""
@@ -106,6 +122,12 @@ def write_report(sched: Schedule, rep: Dict, summary: Optional[Dict], windows: L
         if rep.get("radio") and "Radio" not in (extra or {}):
             for i, ln in enumerate(textwrap.wrap(f"Radio: {rep['radio']}", 118)):
                 y = _mono(fig, 0.06, y, [ln if i == 0 else "    " + ln])
+        warn = tx_events_text(rep.get("tx_events") or {})
+        if warn:
+            for i, ln in enumerate(textwrap.wrap(warn, 118)):
+                fig.text(0.06, y, ln if i == 0 else "    " + ln, fontsize=8, family="monospace", va="top",
+                         color=RED, fontweight="bold")
+                y -= 0.0148
         opts = rep.get("options", {})
         if opts:
             y = _mono(fig, 0.06, y, [f"options: PA limits {'on' if opts.get('pa_in_chain') else 'off'}, TX pre-compensation "

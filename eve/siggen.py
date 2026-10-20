@@ -290,6 +290,7 @@ class GeneratorSession(Session):
             tb.connect(self.scale, blocks.null_sink(gr.sizeof_gr_complex))
         else:
             tb.connect(self.scale, self.radio.tx)
+            getattr(self.radio, "connect_tx_events", lambda _tb: None)(tb)
         self.sink = _NoSink()
         self.decim = None
         self.acc = None

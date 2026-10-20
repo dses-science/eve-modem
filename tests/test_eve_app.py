@@ -175,6 +175,7 @@ def test_eme_defaults_fit_the_moon_chunk(tmp_path):
     win._set_defaults()
     cfg = win._values()
     assert cfg["full_symbol"] is False and cfg["pilot_frames"] == 2
+    assert cfg["variant"] == "B" and cfg["bench_chunk_s"] == 4.0      # the Pi 5 cannot stream Variant A
     # an INI from before 1.0.10 (pilot_frames_test only) keeps its pilot length
     win.settings.q.remove("pilot_frames")
     win.settings.q.setValue("pilot_frames_test", 3)

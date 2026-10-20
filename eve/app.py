@@ -64,8 +64,10 @@ COMMON_DEFAULTS = {"variant": "A", "message": "K0PRT K0PRT", "pilot": True, "n_f
 MODE_DEFAULTS = {
     "sim": {"f_dial_mhz": 1296.0, "repeat": 1, "full_symbol": False, "pilot_frames": 2, "sim_cn0": 20.0, "sim_range_km": 375000.0,
             "sim_seed": 1, "bench_chunk_s": 2.4, "bench_t_off_min": 0.5, "lead_s": 12.0},
-    "bench": {"f_dial_mhz": 1296.0, "repeat": 2, "full_symbol": False, "pilot_frames": 2, "tx_gain": 0.0, "rx_gain": 30.0,
-              "bench_range_km": 0.15, "bench_chunk_s": 2.4, "bench_t_off_min": 0.5, "lead_s": 15.0},
+    # bench on Variant B too (2026-10-20): the bench rehearses the waveform the station uses, and the
+    # Raspberry Pi 5 cannot generate Variant A's 1.5 MS/s in real time; 4 s chunks hold B's pilot + data
+    "bench": {"variant": "B", "f_dial_mhz": 1296.0, "repeat": 2, "full_symbol": False, "pilot_frames": 2, "tx_gain": 0.0, "rx_gain": 30.0,
+              "bench_range_km": 0.15, "bench_chunk_s": 4.0, "bench_t_off_min": 0.5, "lead_s": 15.0},
     # the live modes (Moon, Venus, signal generator into the RF package) default to the switching:
     # the USB relay board + B210 GPIO sequencer (Rick, 2026-10-20: "keyline active")
     "siggen": {"keyer_kind": "TX key + LNA (USB relay board + B210 GPIO)", "f_dial_mhz": 1296.0, "full_symbol": False, "tx_gain": 0.0, "siggen_signal": "CW", "siggen_offset_khz": 0.0,
@@ -156,7 +158,7 @@ TIPS: Dict[str, str] = {
     "sim_seed": "Random seed of the simulated noise; the same seed repeats a run exactly.",
     "bench_range_km": "Synthetic range for the bench schedule. The B210's leakage path has no delay, so keep this "
                       "tiny (0.15 km) and the receive window lands on the transmission itself.",
-    "bench_chunk_s": "Length of each transmit chunk on the bench. 2.4 s mimics the Moon cadence.",
+    "bench_chunk_s": "Length of each transmit chunk on the bench. 4 s is the default (Variant B frames are 0.667 s: a 2-frame pilot and two data frames need 2.7 s); 2.4 s mimics the Moon cadence on Variant A.",
     "bench_t_off_min": "Minimum silence between bench chunks.",
     "eme_chunk_s": "Monostatic Moon: transmit at most the round trip (2.5 s) minus the guard, then listen for the "
                    "echo. 2.4 s. The station's transmit/receive switching must follow this cadence (7.2, O6); if it "

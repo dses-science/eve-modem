@@ -99,11 +99,14 @@ interop drops the pilot) and says so in the teal line under the run modes.
 ## 4.2 Waveform and message
 
 - **Variant** B (1.5 Hz bins, 247 frames of 0.667 s) is the DSES 23 cm monostatic
-  waveform and the default for Venus and the Moon: 1.1 dB more sensitive than A, matched
-  to the 1.5 Hz spread at 1299.5 MHz (design D13, 6.1.1), and the waveform every published
-  link margin assumes. A is the ORI air interface (2.87 Hz bins, 473 frames); use A
-  whenever another station must decode us. The interop mode pins A: no ORI receiver
-  decodes B.
+  waveform and the default for Venus, the Moon and the bench: 1.1 dB more sensitive than
+  A, matched to the 1.5 Hz spread at 1299.5 MHz (design D13, 6.1.1), and the waveform
+  every published link margin assumes. B also halves the radio sample rate (786 kS/s
+  against A's 1.5 MS/s): **the Raspberry Pi 5 station PC generates B in real time but not
+  A**. On A the Pi's transmitter underruns, the chunks go out late or empty, and only the
+  first symbol decodes (found 2026-10-20); the program now says so (below). A is the ORI
+  air interface (2.87 Hz bins, 473 frames); use A whenever another station must decode
+  us, never on the Pi. The interop mode pins A: no ORI receiver decodes B.
 - **Dial frequency**: 1299.5 MHz for Venus 2026 with the 23 cm package; 1296 on the
   bench. The comb sits 25 to 48.5 kHz above the dial.
 - **Message**: K0PRT K0PRT, the club call. Up to 11 characters.
@@ -302,7 +305,8 @@ synchronization (pilot offset, tracker residual, sample gaps), and the key-event
 
 1. **Software simulation** at C/N0 20 dB-Hz, test-length symbols: proves the program on
    the site PC. One minute.
-2. **Bench loopback**, test length, TX gain 0, GPS clock ticked, clock source external:
+2. **Bench loopback**, Variant B (the default; on the Raspberry Pi never A), test length,
+   TX gain 0, GPS clock ticked, clock source external:
    proves the B210, the reference lock, the PPS time set, the archive, the decode. About
    two minutes. Both passes should decode at 20 dB or more of margin.
 3. **Bench loopback, full length, one pass** (34 minutes): proves the long streams with
@@ -345,6 +349,7 @@ about −20 dBm at RX2, so 30 to 40 dB of attenuation between two radios on the 
 | "USRP time did not take on the PPS edge" | No PPS at PPS IN. Check OUT2 to PPS IN (output 2 must be disabled: the program does that). As a fallback tick host-timed. |
 | "PPS verify False" in the log | Same as above: no second PPS edge was seen. |
 | A storm of 'L' or LATE_COMMAND in the log at the start | The radio was not armed in time. Increase the lead time (15 s or more) and close other programs. |
+| "TRANSMITTER UNDERRAN" in red on the Run tab's radio line, in a notice box and in the report; symbol 0 right and the rest wrong with margins near 0 dB; a 'U' then a storm of 'L' in app.log | The host could not generate the transmit samples in time, so the chunks went out late or empty and the receiver heard noise. Variant A streams 1.5 MS/s, beyond the Raspberry Pi 5: use Variant B (786 kS/s, the default). On any PC close other programs and use a direct USB 3 port. The counts (underflows, late packets) are in the session JSON under `tx_events`. |
 | 'O' or overflows in the log | The PC dropped receive samples. One short overflow at start-up is known and padded; repeated ones mean the PC is too busy: close other programs, use a direct USB 3 port. The archive records every gap. |
 | Blank tone strip during a receive window | No signal or wrong RX gain. On the bench check TX gain 0 and nothing on the antenna ports; on the air check the LNA and the sequencer. |
 | Decisions wrong on the bench | Reference unlocked (frequency off), or the LO offset fell back (the radio line says so). Do not go on the air until the bench decodes. |
