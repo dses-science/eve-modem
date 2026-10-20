@@ -34,6 +34,9 @@ from . import modem
 TEAL, NAVY, GOLD = "#156082", "#0A2F40", "#B86A18"
 STRIP_ROWS = 300            # frames kept in the tone strip (~105 s of Variant A)
 STRIP_COLS = 512            # candidate bins collapsed 8:1 for display
+STRIP_MARK_DB = 6.0         # a per-frame peak this far over the strip median gets a marker: measured 2026-10-20,
+                            # noise peaks (B210, 512 collapsed bins) reach 3.4 dB, a 25 dB-Hz signal 9-10 dB
+STRIP_MARK_PX = 8           # ... as a marker of this many screen pixels (one image pixel was invisible, Rick 2026-10-20)
 _MONO = None
 
 
@@ -144,10 +147,16 @@ class OperatorPanel(QtWidgets.QWidget):
         strip_box = QtWidgets.QGroupBox("Tone strip")
         vb = QtWidgets.QVBoxLayout(strip_box)
         vb.addWidget(_caption("Frames x candidate bins, newest at top. 4096-ary FSK sends ONE tone per frame: "
-                              "one dot per row is the whole signal."))
+                              "one dot per row is the whole signal; a peak 6 dB over the noise gets a yellow marker."))
         self.strip_plot = pg.PlotWidget()
         self.strip_img = pg.ImageItem()
         self.strip_plot.addItem(self.strip_img)
+        # the per-frame peaks as fixed-size markers over the image: the image stays the honest
+        # data (one pixel per frame and bin), the markers make the tone visible at any zoom
+        self.strip_marks = pg.ScatterPlotItem(size=STRIP_MARK_PX, pxMode=True, pen=pg.mkPen("#000000", width=1),
+                                              brush=pg.mkBrush("#FFD400"), symbol="o")
+        self.strip_marks.setZValue(10)
+        self.strip_plot.addItem(self.strip_marks)
         self.strip_plot.setLabel("bottom", "tone index d (0 .. 4095)")
         self.strip_plot.setLabel("left", "frames ago")
         self.strip_plot.invertY(True)
@@ -246,7 +255,8 @@ class OperatorPanel(QtWidgets.QWidget):
         # operator help
         strip_box.setToolTip("Each row is one frame (0.35 s); each column a candidate tone (4096 collapsed to 512). "
                              "The waveform sends ONE tone per frame, so a healthy signal is a single bright dot per "
-                             "row that steps to a new column at every symbol boundary; the pilot is a steady column "
+                             "row that steps to a new column at every symbol boundary (a peak 6 dB over the noise gets a "
+                             "yellow marker so it can be seen; noise peaks stay below 4 dB); the pilot is a steady column "
                              "before each pass. Background texture = receiver noise; adjust RX gain so it is visible "
                              "but not saturated. Nothing at all = no signal, wrong gain, or the receive window is closed.")
         self.spec_plot.setToolTip("The metric of the symbol now in progress, summed over its frames so far. Yellow "
@@ -321,6 +331,7 @@ class OperatorPanel(QtWidgets.QWidget):
         self.model = session.model
         self._strip[:] = 0
         self._strip_k[:] = -1
+        self.strip_marks.setData(x=[], y=[])
         self._row = 0
         self._last_metric = self._last_k = None
         self._frames = 0
@@ -410,7 +421,18 @@ class OperatorPanel(QtWidgets.QWidget):
         if drained:
             img = np.roll(self._strip, -(self._row % STRIP_ROWS), axis=0)[::-1]      # newest at top
             med = float(np.median(img[img > 0])) if np.any(img > 0) else 1.0
-            self.strip_img.setImage(np.log10(np.maximum(img, 1e-12) / med).T, autoLevels=False, levels=(0.2, 1.1))
+            L = np.log10(np.maximum(img, 1e-12) / med)
+            self.strip_img.setImage(L.T, autoLevels=False, levels=(0.2, 1.1))
+            # emphasis: the tone is ONE bin of 512 per row and was invisible at one pixel. A
+            # per-frame peak STRIP_MARK_DB over the strip median gets a yellow marker of
+            # STRIP_MARK_PX screen pixels; below the threshold nothing is marked, so noise
+            # peaks are not dressed up as tones (measured: noise maxima over the 512
+            # collapsed bins reach 3.4 dB, a 25 dB-Hz signal 9-10 dB per frame). Image row 0
+            # is the newest frame (top, invertY).
+            d = L.argmax(axis=1)
+            hot = np.nonzero(L[np.arange(L.shape[0]), d] >= STRIP_MARK_DB / 10.0)[0]
+            scale = self.p.m / STRIP_COLS
+            self.strip_marks.setData(x=(d[hot] + 0.5) * scale, y=hot + 0.5)
             self.strip_img.setRect(QtCore.QRectF(0, 0, self.p.m, STRIP_ROWS))
             # the accumulated metric of the symbol the latest frame belongs to (per-frame
             # spectra cannot show a tone at Venus strength; the sum over frames can)
