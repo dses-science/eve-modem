@@ -86,18 +86,23 @@ Every control has a tooltip: hover over it or its label. The essentials:
 | EVE | Venus bounce. 240 s transmit chunks against the 272 s round trip. A full message is 30.2 minutes per pass; plan five passes. |
 
 **Set defaults for this run mode** puts every setting the mode cares about back to the
-design value: frequency, repeat count, symbol length, gains, chunking, timing, Doppler.
+design value: variant, frequency, repeat count, symbol length, gains, chunking, timing,
+Doppler.
 The status line lists what changed. Changing the run mode, the variant, the symbol length,
 or the interop direction also applies a few consistency rules (a sky session gets an
 external clock; Venus and interop get full-length symbols, Venus 1299.5 MHz and the
-amplifier limits; EME starts at test length; a bench or interop chunk grows to hold the
+amplifier limits; interop pins Variant A; EME starts at test length; a bench or interop chunk grows to hold the
 pilot, and on the Moon or Venus the pilot is capped to what the chunk holds; receive-only
 interop drops the pilot) and says so in the teal line under the run modes.
 
 ## 4.2 Waveform and message
 
-- **Variant** A is the ORI air interface (2.87 Hz bins, 473 frames per symbol). Use A
-  whenever another station must decode us. B is a DSES-only variant.
+- **Variant** B (1.5 Hz bins, 247 frames of 0.667 s) is the DSES 23 cm monostatic
+  waveform and the default for Venus and the Moon: 1.1 dB more sensitive than A, matched
+  to the 1.5 Hz spread at 1299.5 MHz (design D13, 6.1.1), and the waveform every published
+  link margin assumes. A is the ORI air interface (2.87 Hz bins, 473 frames); use A
+  whenever another station must decode us. The interop mode pins A: no ORI receiver
+  decodes B.
 - **Dial frequency**: 1299.5 MHz for Venus 2026 with the 23 cm package; 1296 on the
   bench. The comb sits 25 to 48.5 kHz above the dial.
 - **Message**: K0PRT K0PRT, the club call. Up to 11 characters.
@@ -105,21 +110,24 @@ interop drops the pilot) and says so in the teal line under the run modes.
 - **Pilot**: a known tone for the first N frames of **every chunk**; the receiver measures
   the frequency offset on it and confirms the signal is there. The design value is 40
   frames (14 s) on the 240 s Venus chunk. Every chunk must hold the pilot plus two data
-  frames, so the Moon's 2.4 s chunk (six frames) allows four at most; the program caps
-  the setting and says so. Use 2 on the Moon and on the bench: two frames are a decisive
-  check at EME strength, and every pilot frame on the Moon displaces a data frame (a
-  2-frame pilot makes a full-length Moon pass half again as long).
-- **Symbol length**: **full length** (473 frames, 164.8 s per symbol) is the air
-  interface. The **test length** (6 frames, 2.1 s) makes a whole message pass in 23 s
-  for bench work. The program warns before sending a test-length signal on the air.
-  **A short symbol is a deaf symbol.** The waveform reaches 0 dB-Hz only by adding
-  473 frames; the blue line under the setting shows the C/N0 a one-pass decode needs
+  frames, so the Moon's 2.4 s chunk allows four at most on Variant A (six frames) and
+  one on Variant B (three frames); the program caps the setting and says so. The EME
+  defaults use one frame on Variant B; use 2 on the bench. One or two frames are a
+  decisive check at EME strength, and every pilot frame on the Moon displaces a data
+  frame (a one-frame pilot on Variant B makes a full-length Moon pass half again as long).
+- **Symbol length**: **full length** (473 frames of Variant A or 247 of Variant B,
+  164.8 s per symbol either way) is the air interface. The **test length** (6 frames,
+  2.1 s on A, 4 s on B) makes a whole message pass in under a minute for bench work. The
+  program warns before sending a test-length signal on the air.
+  **A short symbol is a deaf symbol.** The waveform reaches 0 dB-Hz only by adding up
+  the frames of a full symbol; the blue line under the setting shows the C/N0 a one-pass decode needs
   (design 2.4 model, 10 % message error rate), and it rises 6.5 dB for every factor of
   ten fewer frames:
 
   | Frames per symbol | Symbol | Needs C/N0 above |
   |---|---|---|
   | 473 (full, Variant A) | 164.8 s | −0.6 dB-Hz |
+  | 247 (full, Variant B) | 164.7 s | −1.7 dB-Hz |
   | 118 | 41 s | +3.0 dB-Hz |
   | 47 | 16 s | +5.4 dB-Hz |
   | 12 | 4.2 s | +9.5 dB-Hz |
@@ -132,7 +140,8 @@ interop drops the pilot) and says so in the teal line under the run modes.
 
 ## 4.3 Radio and reference
 
-- **TX gain** 0 dB on the bench; on the air, what the driver's input pad expects.
+- **TX gain** 0 dB on the bench; 55 dB is the Moon and Venus default. The driver's input
+  pad decides the final figure; the signal generator mode (4.6) measures it.
 - **RX gain**: set so the background of the tone strip is visible but not saturated
   (30 dB on the bench, 40 to 50 dB behind the LNA).
 - **Ports**: the B210 has two frontends, A and B, each with a TX/RX and an RX2 port.

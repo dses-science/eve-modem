@@ -66,15 +66,18 @@ MODE_DEFAULTS = {
                "siggen_spacing_khz": 10.0, "siggen_level_db": -3.0, "siggen_pa": False,
                "siggen_sim": False, "siggen_sweep": False, "siggen_sweep_start_db": 0.0, "siggen_sweep_stop_db": 60.0, "siggen_sweep_step_db": 5.0,
                "siggen_sweep_hold_s": 10.0, "lead_s": 15.0},
-    "interop": {"f_dial_mhz": 1296.0, "repeat": 1, "full_symbol": True, "pilot_frames": 40, "tx_gain": 30.0, "rx_gain": 30.0,
+    "interop": {"variant": "A", "f_dial_mhz": 1296.0, "repeat": 1, "full_symbol": True, "pilot_frames": 40, "tx_gain": 30.0, "rx_gain": 30.0,
                 "interop_chunk_s": 300.0, "interop_search_frames": 30, "sky_start_now": True, "lead_s": 30.0},
     # EME: test length first (guide section 9, step 4) and a 2-frame pilot: the 2.4 s Moon chunk
     # holds six Variant A frames, so the design's 40-frame pilot can never fit it (found 2026-10-19)
-    "eme": {"f_dial_mhz": 1296.0, "repeat": 2, "full_symbol": False, "pilot_frames": 2, "tx_gain": 0.0, "rx_gain": 40.0,
+    # Variant B for the Moon and Venus (design D13: the DSES 23 cm monostatic waveform, +1.1 dB; the
+    # published link margins assume it); the Moon chunk holds three B frames, so the pilot is 1 frame.
+    # TX gain 55 dB on the air for the Moon and Venus (Rick, 2026-10-20)
+    "eme": {"variant": "B", "f_dial_mhz": 1296.0, "repeat": 2, "full_symbol": False, "pilot_frames": 1, "tx_gain": 55.0, "rx_gain": 40.0,
             "eme_chunk_s": 2.4, "eme_rtt_guard": 0.1, "eme_t_off_min": 0.5, "eme_t_on_max": 300.0, "eme_pa": False,
             "sky_mode": "monostatic", "sky_source": "auto", "sky_precomp": True, "sky_rx_doppler": False,
             "sky_start_now": True, "lead_s": 30.0},
-    "eve": {"f_dial_mhz": 1299.5, "repeat": 5, "full_symbol": True, "pilot_frames": 40, "tx_gain": 0.0, "rx_gain": 45.0,
+    "eve": {"variant": "B", "f_dial_mhz": 1299.5, "repeat": 5, "full_symbol": True, "pilot_frames": 40, "tx_gain": 55.0, "rx_gain": 45.0,
             "sky_chunk_s": 240.0, "sky_rtt_guard": 30.0, "sky_t_on_max": 300.0, "sky_t_off_min": 240.0, "sky_pa": True,
             "sky_mode": "monostatic", "sky_source": "auto", "sky_precomp": True, "sky_rx_doppler": False,
             "sky_start_now": True, "lead_s": 60.0},
@@ -97,8 +100,10 @@ TIPS: Dict[str, str] = {
     "mode:eve": "Venus bounce. 272 s round trip on conjunction day: 240 s transmit chunks, then listen. A full "
                 "message is 30.2 minutes per pass; five passes are planned (design 4.1, 4.2). The amplifier limits "
                 "are enforced regardless of the schedule.",
-    "variant": "A: the ORI air interface (2.87 Hz bins, 473 frames per symbol) - use it whenever another station "
-               "must decode us. B: DSES 23 cm monostatic variant (1.5 Hz bins, 247 frames), +1.1 dB, DSES-only.",
+    "variant": "B: the DSES 23 cm monostatic waveform (1.5 Hz bins, 247 frames of 0.667 s), 1.1 dB more sensitive "
+               "than A and the Venus and Moon default (design D13); the published link margins assume it; no ORI "
+               "receiver decodes it. A: the ORI air interface (2.87 Hz bins, 473 frames) - whenever another station "
+               "must decode us; the interop mode pins it.",
     "f_dial_mhz": "Dial frequency in MHz. The 4096-tone comb sits 25 to 48.5 kHz ABOVE it. Venus 2026: 1299.5 "
                   "(23 cm package). Bench: 1296. 13 cm: 2304 or 2400. The LO parks 300 kHz below (LO offset).",
     "message": "Up to 11 ASCII characters (90 bits + CRC-16 -> BCH(127,106) -> 11 symbols of 12 bits). The Venus "
@@ -118,9 +123,9 @@ TIPS: Dict[str, str] = {
                     "frames are a decisive check at EME strength, and every pilot frame on the Moon displaces a data frame.",
     "serial": "B210 serial number, or blank for the first B2xx found on USB. The Haswell radio and the bench clone "
               "have different serials; set it when both are plugged in.",
-    "tx_gain": "B210 transmit gain, 0 to 89.75 dB. 0 dB for the loopback bench (the leakage is enough). On the air the "
-               "driver amplifier's input level sets it; +8 dBm out of the B210 at maximum. Never exceed what the "
-               "driver's input pad expects (design 7.1, O4).",
+    "tx_gain": "B210 transmit gain, 0 to 89.75 dB. 0 dB for the loopback bench (the leakage is enough). On the air "
+               "55 dB is the Moon and Venus default; the driver's input pad decides the final figure, and the "
+               "signal generator mode measures it (section 4.6). Never exceed what the driver's input pad expects (design 7.1, O4).",
     "rx_gain": "B210 receive gain. Set it so the receiver noise sits 10 to 15 dB above the B210's own floor: watch the "
                "tone strip's background on the Run tab. 30 dB on the bench; 40 to 50 dB behind the LNA.",
     "clock": "external: 10 MHz on REF IN and 1 PPS on PPS IN from the station GPS clock (the standard). gpsdo: an "
@@ -1671,8 +1676,10 @@ class EveApp(QtWidgets.QMainWindow):
         before = self._values()
         self._apply_values(d)
         changed = [k for k in d if before.get(k) != self._values().get(k)]
-        self._coherence()
+        notes = self._coherence()
         msg = f"defaults for {m}: " + (", ".join(changed) if changed else "nothing to change")
+        if notes:
+            msg += "; " + "; ".join(notes)
         self.lbl_coherence.setText(msg)
         self.status.setText(msg)
         self._log(msg)
@@ -1693,6 +1700,9 @@ class EveApp(QtWidgets.QMainWindow):
         after a mode, variant, symbol-length, or interop-direction change. Returns notes."""
         m = self.mode()
         notes: List[str] = []
+        if m == "interop" and self.w["variant"].currentText() != "A":
+            self.w["variant"].setCurrentText("A")       # ORI receivers implement Variant A only (D13, 6.1.1)
+            notes.append("Variant A (the partner's receivers implement the ORI air interface only)")
         v = self.w["variant"].currentText()
         p = EveParams.named(v)
         # every chunk must hold the pilot plus two data frames (the worker refuses otherwise,
