@@ -569,6 +569,28 @@ class Runner:
 
 
 # ---- process target ------------------------------------------------------------------------
+def locked_sender(conn, on_error=None):
+    """A send(msg) for `conn` that one lock serializes across threads. The worker sends from
+    three threads (the sink's thread: one "frame" message of a little over 16 KB per received
+    frame; the status thread every 0.5 s; the main thread: log lines). CPython writes a
+    message over 16 KB to a Unix socket as TWO writes (header, then body), so another
+    thread's send can land between them and corrupt the stream: the GUI's reader died with
+    "invalid load key" and the run aborted "GUI pipe lost" (the Haswell Pi 5, 2026-10-20
+    21:50 UTC, a full-length bench run, frame 247). Windows writes the message in one call,
+    which is why the bench here never showed it. on_error (optional) runs when a send fails
+    (the GUI is gone)."""
+    lock = threading.Lock()
+
+    def send(msg):
+        try:
+            with lock:
+                conn.send(msg)
+        except Exception:       # noqa: BLE001
+            if on_error is not None:
+                on_error()
+    return send
+
+
 def run_job(cfg: Dict, preview_only: bool, conn, redecode: Optional[str] = None) -> None:
     """The multiprocessing (spawn) target: enable faulthandler into fault.log under
     log_dir(), run Runner.run(cfg, preview_only) or, with `redecode` set to a schedule JSON
@@ -582,11 +604,7 @@ def run_job(cfg: Dict, preview_only: bool, conn, redecode: Optional[str] = None)
         pass
     pending = {"abort": None, "commands": []}
 
-    def send(msg):
-        try:
-            conn.send(msg)
-        except Exception:
-            pending["abort"] = pending["abort"] or "GUI pipe lost"     # the status loop aborts the session
+    send = locked_sender(conn, on_error=lambda: pending.__setitem__("abort", pending["abort"] or "GUI pipe lost"))
 
     def poll_abort():
         try:

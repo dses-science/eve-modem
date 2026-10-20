@@ -539,6 +539,11 @@ class RunController(QtCore.QObject):
                     msg = conn.recv()
                 except (EOFError, OSError, BrokenPipeError):     # the worker is gone (pipe ended)
                     break
+                except Exception as e:      # noqa: BLE001  (a corrupt message: the stream cannot be resynchronized)
+                    self.log.emit("ERROR: the worker's message could not be read (" + type(e).__name__ + f": {e}); "
+                                  "the GUI-worker pipe is corrupt: aborting the run")
+                    self.abort("the GUI could not read the worker's messages (corrupt pipe)")
+                    break
                 finished = self._handle_safely(msg) or finished
         finally:
             proc.join(5.0)
