@@ -81,7 +81,7 @@ def test_app_sim_run(tmp_path):
     win.tabs.setCurrentWidget(win.setup)
     _pump(app, 0.3)
     win.grab().save(str(archive / "screenshot_setup.png"))
-    win.tabs.setCurrentWidget(win.panel)
+    win.tabs.setCurrentWidget(win.run_page)
     _pump(app, 0.3)
     win.grab().save(str(archive / "screenshot_run.png"))
     win.tabs.setCurrentWidget(win.report)
