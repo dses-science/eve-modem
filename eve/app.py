@@ -1906,10 +1906,7 @@ class EveApp(QtWidgets.QMainWindow):
         self._save()
         cfg = self._values()
         if cfg["mode"] in ("eme", "eve", "interop") and cfg["full_symbol"] is False:
-            r = QtWidgets.QMessageBox.question(self, "Test-length symbols on the air",
-                                               "The symbol length is a TEST length, not the 473-frame air interface. "
-                                               "A partner station could not decode this. Start anyway?")
-            if r != QtWidgets.QMessageBox.Yes:
+            if not self._confirm_test_length(cfg):
                 return
         self.report.set_archive(cfg["archive"])
         self.preview.setPlainText("")
@@ -1917,6 +1914,53 @@ class EveApp(QtWidgets.QMainWindow):
             self.tabs.setCurrentWidget(self.run_page)
         else:
             self.status.setText("a run is already in progress")
+
+    def _confirm_test_length(self, cfg: Dict) -> bool:
+        """Start pressed with a test-length symbol in a sky or interop mode: say what the test
+        length means for THIS run and recommend what to do (Rick, 2026-10-20: the old box only
+        asked 'Start anyway?'). Moon: the test length is the recommended first run (the EME
+        defaults), so the default answer is Yes. Venus: a test symbol cannot reach the link, so
+        the default is No. Interop: the partner decodes the full-length air interface only."""
+        v = cfg["variant"]
+        p = EveParams.named(v)
+        n_full = FULL_FRAMES.get(v, p.n_frames)
+        n = int(cfg["n_frames_test"])
+
+        def pass_min(frames: int) -> float:
+            return frames * p.n_fft / p.modem_rate * p.n_sym / 60.0
+
+        head = (f"The symbol length is the TEST length: {n} frames of Variant {v} ({n * p.t_frame:.1f} s per symbol, "
+                f"a message pass in {pass_min(n):.1f} min), not the {n_full}-frame air interface "
+                f"({pass_min(n_full):.0f} min per pass).\n\n")
+        if cfg["mode"] == "eme":
+            title = "Test-length symbols on the Moon"
+            body = ("RECOMMENDED: Yes. The test length is the first Moon run (the EME defaults): it proves the echo "
+                    "path, the Doppler correction, the sequencer and the gains in minutes, and the echo is strong "
+                    "enough to decode it. When it decodes, tick 'full length' on the Setup tab and run again: that "
+                    "is the rehearsal for Venus and the only run that shows the real sensitivity.\n\n"
+                    "Start the test-length run now?")
+            default = QtWidgets.QMessageBox.Yes
+        elif cfg["mode"] == "eve":
+            title = "Test-length symbols at Venus"
+            body = (f"RECOMMENDED: No. A Venus echo decodes only by adding up the frames of a full symbol: this test "
+                    f"length needs about {cn0_threshold_db(v, n):+.1f} dB-Hz of C/N0, the full length "
+                    f"{cn0_threshold_db(v, n_full):+.1f} dB-Hz, and the link budget sits near the full-length figure. "
+                    "A test-length run at Venus spends amplifier time on a signal that cannot be decoded.\n\n"
+                    "Press No, then tick 'full length' on the Setup tab (or press 'Set defaults for this run "
+                    "mode'). Start the test-length run anyway?")
+            default = QtWidgets.QMessageBox.No
+
+        else:
+            title = "Test-length symbols with a partner"
+            body = (f"RECOMMENDED: No. The partner's receiver decodes the {n_full}-frame Variant A air interface only; "
+                    "it cannot decode a test-length symbol, so nothing is learned from the run.\n\n"
+                    "Press No, then tick 'full length' on the Setup tab (or press 'Set defaults for this run "
+                    "mode'). Start the test-length run anyway?")
+            default = QtWidgets.QMessageBox.No
+
+        r = QtWidgets.QMessageBox.question(self, title, head + body,
+                                           QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, default)
+        return r == QtWidgets.QMessageBox.Yes
 
     def _build_generator_bar(self) -> QtWidgets.QWidget:
         """The signal generator's controls on the Run tab: KEY / UNKEY (through the

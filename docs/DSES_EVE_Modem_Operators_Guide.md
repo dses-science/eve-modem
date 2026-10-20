@@ -118,7 +118,9 @@ interop drops the pilot) and says so in the teal line under the run modes.
 - **Symbol length**: **full length** (473 frames of Variant A or 247 of Variant B,
   164.8 s per symbol either way) is the air interface. The **test length** (6 frames,
   2.1 s on A, 4 s on B) makes a whole message pass in under a minute for bench work. The
-  program warns before sending a test-length signal on the air.
+  program asks before sending a test-length signal on the air and says what to do: on
+  the Moon the test length is the recommended first run (answer Yes, then full length
+  once it decodes); for Venus and interop it recommends No and full length.
   **A short symbol is a deaf symbol.** The waveform reaches 0 dB-Hz only by adding up
   the frames of a full symbol; the blue line under the setting shows the C/N0 a one-pass decode needs
   (design 2.4 model, 10 % message error rate), and it rises 6.5 dB for every factor of
@@ -300,7 +302,7 @@ synchronization (pilot offset, tracker residual, sample gaps), and the key-event
    two minutes. Both passes should decode at 20 dB or more of margin.
 3. **Bench loopback, full length, one pass** (34 minutes): proves the long streams with
    no underruns and the amplifier-limit chunking at real length. Run it once per PC.
-4. **EME**, test length first, then full length, pilot 2 frames (the EME defaults), with
+4. **EME**, test length first, then full length, Variant B, pilot 1 frame (the EME defaults), with
    the dish on the Moon: the echo path,
    the Doppler pre-compensation, the sequencer, the LNA, and the gains. Expect the echo
    in the receive windows 2.5 s after each chunk.
