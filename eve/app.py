@@ -515,13 +515,13 @@ class RunController(QtCore.QObject):
                         if not proc.is_alive():
                             # one more look for messages that arrived with the exit
                             while conn.poll():
-                                finished = self._handle(conn.recv()) or finished
+                                finished = self._handle_safely(conn.recv()) or finished
                             break
                         continue
                     msg = conn.recv()
                 except (EOFError, OSError, BrokenPipeError):     # the worker is gone (pipe ended)
                     break
-                finished = self._handle(msg) or finished
+                finished = self._handle_safely(msg) or finished
         finally:
             proc.join(5.0)
             if finished is None and not self._saw_session and self._job[3] > 0 and proc.exitcode not in (0, None):
@@ -551,6 +551,22 @@ class RunController(QtCore.QObject):
             self.state.emit("idle")
             if not finished.get("preview"):         # a preview has nothing to report
                 self.finished.emit(finished)
+
+    def _handle_safely(self, msg) -> Optional[Dict]:
+        """_handle with the reader thread protected: an exception while handling a message
+        used to kill the thread and leave the worker running unseen (2026-10-20: the GUI
+        refused a schedule the worker had already accepted, then reported the worker dead
+        while it was alive). Now the error is logged, and if the failed message was the
+        session itself the worker is told to abort, so nothing runs without its panel."""
+        try:
+            return self._handle(msg)
+        except Exception as e:      # noqa: BLE001
+            kind = msg[0] if isinstance(msg, (tuple, list)) and msg else "?"
+            self.log.emit(f"ERROR handling the worker's '{kind}' message: "
+                          + "".join(traceback.format_exception_only(type(e), e)).strip())
+            if kind == "session":
+                self.abort("the GUI could not accept the session: aborting the worker")
+            return None
 
     def _handle(self, msg) -> Optional[Dict]:
         """Dispatch one pipe message to the matching signal or the RemoteSession; returns the

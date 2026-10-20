@@ -95,10 +95,19 @@ def to_datetime(t: TimeLike) -> datetime:
 def iso_utc(t: TimeLike, digits: int = 3) -> str:
     """ISO-8601 UTC text 'YYYY-MM-DDTHH:MM:SS[.fff]Z' with `digits` fractional digits
     (0 = whole seconds); the form used throughout the schedule, sidecars and logs."""
+    # Round to the requested digit BEFORE formatting, carrying into the seconds field: a
+    # fraction that rounds up to the next whole second (e.g. 53.9996 s at 3 digits) must read
+    # 54.000, not 53.000. The old form took the rounded fraction modulo 10^digits and left
+    # the seconds alone, which dropped a whole second in about one timestamp per thousand;
+    # a full-length EME schedule (1,735 chunks, four times each) hit it at chunk 866 on
+    # 2026-10-20 and the GUI refused its own schedule (tx window 3.090 s for 6 frames).
+    unit_us = 10 ** (6 - digits) if digits else 10 ** 6
     dt = to_datetime(t)
+    rounded_us = int(round(dt.microsecond / unit_us)) * unit_us
+    dt = dt.replace(microsecond=0) + timedelta(microseconds=rounded_us)
     s = dt.strftime("%Y-%m-%dT%H:%M:%S")
     if digits:
-        s += f".{int(round(dt.microsecond / 10 ** (6 - digits))) % (10 ** digits):0{digits}d}"
+        s += f".{dt.microsecond // unit_us:0{digits}d}"
     return s + "Z"
 
 

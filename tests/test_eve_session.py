@@ -48,6 +48,23 @@ def test_time_helpers():
     assert abs(D.to_unix(D.to_datetime(t)) - t) < 1e-6
 
 
+def test_iso_utc_rounds_with_carry():
+    """A fraction that rounds up to the next second must carry into the seconds field (the
+    2026-10-20 EME schedule bug: 53.9996 s was written as 53.000, one second early, and the
+    GUI refused chunk 866 of its own schedule)."""
+    t = D.to_unix("2026-10-20T01:49:53Z")
+    assert D.iso_utc(t + 0.9994) == "2026-10-20T01:49:53.999Z"
+    assert D.iso_utc(t + 0.9996) == "2026-10-20T01:49:54.000Z"
+    assert D.iso_utc(t + 0.99999) == "2026-10-20T01:49:54.000Z"
+    assert D.iso_utc(t + 6.9997, 0) == "2026-10-20T01:50:00Z"            # carry across a minute
+    assert D.iso_utc(D.to_unix("2026-12-31T23:59:59.9995Z")) == "2027-01-01T00:00:00.000Z"
+    assert D.iso_utc(t + 0.1234567, 6) == "2026-10-20T01:49:53.123457Z"
+    # text -> seconds -> text stays within half a unit for every millisecond of a second
+    for ms in range(0, 1000):
+        x = t + ms / 1000.0 + 0.0004
+        assert abs(D.to_unix(D.iso_utc(x)) - x) <= 0.0005 + 1e-9, ms
+
+
 def test_venus_geometry_matches_document():
     """Section 2.1 / Figure 1: RTT 272 s, two-way Doppler +9.5 to -4.5 kHz at 2304 MHz,
     rate to -0.48 Hz/s, window above 20 deg about 15:26 to 21:22 UTC."""

@@ -222,8 +222,14 @@ class Schedule:
     @classmethod
     def from_json(cls, src: Union[str, Path]) -> "Schedule":
         """From a JSON file path, or from the JSON text itself when no such file exists."""
-        p = Path(src)
-        txt = p.read_text(encoding="utf-8") if p.exists() else str(src)
+        s = str(src)
+        if s.lstrip().startswith("{"):
+            return cls.from_dict(json.loads(s))     # the JSON text itself
+        try:
+            is_file = Path(s).exists()
+        except (OSError, ValueError):               # macOS/Linux: a long text is "File name too long"
+            is_file = False
+        txt = Path(s).read_text(encoding="utf-8") if is_file else s
         return cls.from_dict(json.loads(txt))
 
     # ---- checks ------------------------------------------------------------------------
