@@ -4,7 +4,7 @@
 | | |
 |---|---|
 | Document | DSES EVE Modem Operator's Guide |
-| Revision | Rev C — DRAFT (program 1.0.18) |
+| Revision | Rev C — DRAFT (program 1.0.19) |
 | Date | 2026-10-23 |
 | Prepared by | Rick Hambly, K0GD, Deep Space Exploration Society |
 | Funding | Supported by a grant from Amateur Radio Digital Communications. |

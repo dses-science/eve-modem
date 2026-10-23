@@ -130,8 +130,10 @@ class OperatorPanel(QtWidgets.QWidget):
 
         # header: session + phase + clocks
         self.lbl_title = QtWidgets.QLabel()
+        self.lbl_title.setWordWrap(True)          # the session line is long; it must not set the window width
         self.lbl_title.setStyleSheet(f"QLabel {{ font-size: 15px; font-weight: bold; color: {NAVY}; }}")
         self.lbl_phase = QtWidgets.QLabel("idle")
+        self.lbl_phase.setWordWrap(True)
         self._phase_kind = None
         self.set_phase("idle", "idle")
         self.lbl_clock = QtWidgets.QLabel()
