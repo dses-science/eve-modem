@@ -132,9 +132,9 @@ def test_eme_defaults_fit_the_moon_chunk(tmp_path):
     win._set_defaults()
     cfg = win._values()
     # Variant B on the Moon (D13): the 2.4 s chunk holds three 0.667 s frames, one pilot + two data;
-    # TX gain 55 dB on the air
+    # TX gain 53 dB on the air
     assert cfg["variant"] == "B" and cfg["pilot"] and cfg["pilot_frames"] == 1 and cfg["full_symbol"] is False
-    assert fits(cfg) and cfg["tx_gain"] == 55.0 and cfg["keyer_kind"] == "sequencer"
+    assert fits(cfg) and cfg["tx_gain"] == 53.0 and cfg["keyer_kind"] == "sequencer"
     win.w["variant"].setCurrentText("A")        # Variant A: six frames per chunk
     # full length stays full on the Moon (the rules no longer flip it) and the pilot still fits
     win.w["full_symbol"].setChecked(True)
@@ -162,7 +162,7 @@ def test_eme_defaults_fit_the_moon_chunk(tmp_path):
     cfg = win._values()
     assert cfg["variant"] == "B" and cfg["full_symbol"] is True and cfg["pilot"] and cfg["pilot_frames"] == 40
     assert cfg["repeat"] == 7                                        # the 2026-10-20 operating schedule
-    assert cfg["tx_gain"] == 55.0 and cfg["keyer_kind"] == "sequencer"
+    assert cfg["tx_gain"] == 53.0 and cfg["keyer_kind"] == "sequencer"
     # the Venus operations schedule (D26): start when Venus rises above 10 deg, stop after the
     # passes (and at 10 deg); the fields the start kind does not use are hidden
     assert cfg["sky_start_kind"] == "when the target rises" and cfg["sky_stop_kind"] == "after the passes"

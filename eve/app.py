@@ -82,12 +82,12 @@ MODE_DEFAULTS = {
     # holds six Variant A frames, so the design's 40-frame pilot can never fit it (found 2026-10-19)
     # Variant B for the Moon and Venus (design D13: the DSES 23 cm monostatic waveform, +1.1 dB; the
     # published link margins assume it); the Moon chunk holds three B frames, so the pilot is 1 frame.
-    # TX gain 55 dB on the air for the Moon and Venus (Rick, 2026-10-20)
-    "eme": {"keyer_kind": "TX key + LNA (USB relay board + B210 GPIO)", "variant": "B", "f_dial_mhz": 1296.0, "repeat": 2, "full_symbol": False, "pilot_frames": 1, "tx_gain": 55.0, "rx_gain": 40.0,
+    # TX gain 53 dB on the air for the Moon and Venus (Rick, 2026-10-23; 55 from 2026-10-20)
+    "eme": {"keyer_kind": "TX key + LNA (USB relay board + B210 GPIO)", "variant": "B", "f_dial_mhz": 1296.0, "repeat": 2, "full_symbol": False, "pilot_frames": 1, "tx_gain": 53.0, "rx_gain": 40.0,
             "eme_chunk_s": 2.4, "eme_rtt_guard": 0.1, "eme_t_off_min": 0.5, "eme_t_on_max": 300.0, "eme_pa": False,
             "sky_mode": "monostatic", "sky_source": "auto", "sky_precomp": True, "sky_rx_doppler": False,
             "sky_start_kind": "now +", "sky_stop_kind": "after the passes", "sky_min_el_deg": 10.0, "lead_s": 30.0},
-    "eve": {"keyer_kind": "TX key + LNA (USB relay board + B210 GPIO)", "variant": "B", "f_dial_mhz": 1299.5, "repeat": 7, "full_symbol": True, "pilot_frames": 40, "tx_gain": 55.0, "rx_gain": 45.0,
+    "eve": {"keyer_kind": "TX key + LNA (USB relay board + B210 GPIO)", "variant": "B", "f_dial_mhz": 1299.5, "repeat": 7, "full_symbol": True, "pilot_frames": 40, "tx_gain": 53.0, "rx_gain": 45.0,
             "sky_chunk_s": 240.0, "sky_rtt_guard": 30.0, "sky_t_on_max": 300.0, "sky_t_off_min": 240.0, "sky_pa": True,
             # the Venus operating schedule (2026-10-20, D26): START any time, the run waits for Venus to
             # reach 10 degrees, sends up to seven passes and stops when Venus drops below 10 degrees
@@ -119,7 +119,9 @@ TIPS: Dict[str, str] = {
                "receiver decodes it. A: the ORI air interface (2.87 Hz bins, 473 frames) - whenever another station "
                "must decode us; the interop mode pins it.",
     "f_dial_mhz": "Dial frequency in MHz. The 4096-tone comb sits 25 to 48.5 kHz ABOVE it. Venus 2026: 1299.5 "
-                  "(23 cm package). Bench: 1296. 13 cm: 2304 or 2400. The LO parks 300 kHz below (LO offset).",
+                  "(23 cm package). Bench: 1296. 13 cm: 2304 or 2400. The LO parks 300 kHz below (LO offset). "
+                  "Moon and Venus runs are refused unless the whole comb lies inside a US amateur band "
+                  "(23 cm: dial 1240 to 1299.95; 13 cm: 2300 to 2309.95 or 2390 to 2449.95; 9 cm, 5 cm, 33 cm, 70 cm).",
     "message": "Up to 11 ASCII characters (90 bits + CRC-16 -> BCH(127,106) -> 11 symbols of 12 bits). The Venus "
                "message is K0PRT K0PRT, the club call, never a personal call.",
     "repeat": "How many times the message is sent. The receiver adds the passes before deciding, so every extra pass "
@@ -1862,6 +1864,11 @@ class EveApp(QtWidgets.QMainWindow):
             if self.w["clock"].currentText() == "internal":
                 self.w["clock"].setCurrentText("external")
                 notes.append("clock source external (no internal reference on the air)")
+        if m in ("eme", "eve"):
+            from .bands import check_on_air
+            bad = check_on_air(self.w["f_dial_mhz"].value() * 1e6, p)
+            if bad:
+                notes.append("OUTSIDE THE AMATEUR BANDS, Start will refuse: " + bad)
         if m == "eve":
             if abs(self.w["f_dial_mhz"].value() - 1296.0) < 1e-6:
                 self.w["f_dial_mhz"].setValue(1299.5)
@@ -2062,6 +2069,13 @@ class EveApp(QtWidgets.QMainWindow):
         cfg = self._values()
         if cfg["mode"] in ("eme", "eve", "interop") and cfg["full_symbol"] is False:
             if not self._confirm_test_length(cfg):
+                return
+        if cfg["mode"] in ("eme", "eve"):
+            from .bands import check_on_air
+            bad = check_on_air(float(cfg["f_dial_mhz"]) * 1e6, EveParams.named(cfg["variant"]))
+            if bad:
+                QtWidgets.QMessageBox.critical(self, "Outside the amateur bands",
+                                               "Refused: " + bad + "\n\nMoon and Venus runs transmit only inside a US amateur band.")
                 return
         if cfg["mode"] in ("eme", "eve") and cfg.get("keyer_kind", "none") == "none":
             # Haswell, 2026-10-23: the day's Venus runs went out with Switching at 'none', so the

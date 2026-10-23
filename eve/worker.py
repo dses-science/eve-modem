@@ -134,6 +134,11 @@ class Runner:
 
             if mode == "siggen":
                 return self._run_generator(cfg, p, radio, f_dial, archive, now, gps_text, preview_only)
+            if mode in ("eme", "eve"):
+                from . import bands
+                bad = bands.check_on_air(f_dial, p)
+                if bad:
+                    raise RuntimeError("refused, on the air: " + bad)
 
             # start time and ephemeris. Start: now + lead, a UTC time, or (sky modes) when the
             # target rises above the minimum elevation (eve/ops.py, D26); an INI from before

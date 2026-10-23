@@ -214,6 +214,12 @@ class Session:
             s.validate()
         except ValueError as e:
             problems.append(f"schedule: {e}")
+        if s.target in ("moon", "venus") and self.opts.tx_enabled:
+            # an on-air run stays inside the US amateur bands, comb and all (Rick, 2026-10-23)
+            from . import bands
+            bad = bands.check_on_air(s.f_dial_hz, s.params)
+            if bad:
+                problems.append("on the air: " + bad)
         if self.opts.pa_in_chain:
             for c in s.chunks:
                 if c.tx_stop - c.tx_start > PA_T_ON_MAX_S + 1e-6:

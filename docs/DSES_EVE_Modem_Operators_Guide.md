@@ -4,7 +4,7 @@
 | | |
 |---|---|
 | Document | DSES EVE Modem Operator's Guide |
-| Revision | Rev C — DRAFT (program 1.0.22) |
+| Revision | Rev C — DRAFT (program 1.0.23) |
 | Date | 2026-10-23 |
 | Prepared by | Rick Hambly, K0GD, Deep Space Exploration Society |
 | Funding | Supported by a grant from Amateur Radio Digital Communications. |
@@ -108,7 +108,11 @@ interop drops the pilot) and says so in the teal line under the run modes.
   air interface (2.87 Hz bins, 473 frames); use A whenever another station must decode
   us, never on the Pi. The interop mode pins A: no ORI receiver decodes B.
 - **Dial frequency**: 1299.5 MHz for Venus 2026 with the 23 cm package; 1296 on the
-  bench. The comb sits 25 to 48.5 kHz above the dial.
+  bench. The comb sits 25 to 48.5 kHz above the dial. A Moon or Venus run is refused unless
+  the whole comb lies inside a US amateur band: on 23 cm the dial may be 1240 to 1299.95
+  MHz, on 13 cm 2300 to 2309.95 or 2390 to 2449.95 (the other bands the B210 reaches, 70
+  cm, 33 cm, 9 cm and 5 cm, likewise). The teal line under the run modes warns as soon as
+  the dial leaves a band.
 - **Message**: K0PRT K0PRT, the club call. Up to 11 characters.
 - **Repeat count**: passes of the message. The receiver adds them; seven for Venus (the
   operating schedule: about 8 hours, Venus above 10 degrees), five at the full 1200 W.
@@ -147,7 +151,7 @@ interop drops the pilot) and says so in the teal line under the run modes.
 
 ## 4.3 Radio and reference
 
-- **TX gain** 0 dB on the bench; 55 dB is the Moon and Venus default. It can be turned
+- **TX gain** 0 dB on the bench; 53 dB is the Moon and Venus default. It can be turned
   while a run is going, in any mode: the new gain is applied at once, logged with its time
   and written to the session JSON, so the drive the amplifier saw is on record. The mouse
   wheel changes a field only after you have clicked into it, so scrolling the Setup page
@@ -401,6 +405,7 @@ about −20 dBm at RX2, so 30 to 40 dB of attenuation between two radios on the 
 | The Keying group's Switching reads "none" after the program was restarted or updated | Before 1.0.20 the saved choice was lost on every start, and a run then keyed neither the PA nor the LNA (the key lamp still shows the timing). From 1.0.20 the choice is kept; a Moon or Venus START with Switching at "none" asks "Start anyway, without keying?". Check the Keying group once after any update. |
 | "the run worker stopped without a result" | The run process ended without reporting. Read the last lines of `app.log` before it (section 3 names the log folder). Before 1.0.10 a full-length sky schedule could trip a timestamp rounding fault in the program itself (one timestamp in a thousand written a second early; fixed), and the message appeared while the worker was in fact still running. |
 | "chunk would hold no frames" | The chunk settings leave no room between the round trip and the guard. Restore the mode's defaults. |
+| "Refused, on the air: dial ... puts the comb at ... outside the US amateur bands" | The dial frequency (or the comb above it) is outside a ham band. Set a dial inside the band with room for the comb (section 4.2); on 23 cm no higher than 1299.95 MHz. |
 | "the stop ... is not after the start" or "no chunk fits between the start ... and the stop" | The stop (the UTC stop, or the target setting below the minimum elevation) comes before a chunk and its echo could complete. Start earlier, stop later, or lower the minimum elevation; the preview's OPERATIONS block shows the day's window. |
 | "does not reach 10 deg within two days" | Start *when the target rises* was chosen but the target stays below the minimum elevation for two days from now. Check the target (Moon or Venus) and the minimum elevation, or set a UTC start. |
 | Horizons unreachable | The ephemeris source falls back to astropy with the local DE440s. The Doppler differs by up to 10 Hz at 13 cm; acceptable, but note it in the log. |
