@@ -166,6 +166,7 @@ class SessionReport:
     notes: List[str] = field(default_factory=list)
     tx_events: Dict = field(default_factory=dict)      # underflow / late / seq_error counts (EveRadio)
     tx_resyncs: List[Dict] = field(default_factory=list)   # the stream re-timed itself after a stall (D26)
+    level_events: List[Dict] = field(default_factory=list)   # TX gain changed live by the operator (device time, dB)
 
 
 class Session:
@@ -261,6 +262,34 @@ class Session:
             self.report.stop_reason = reason
             self.log(f"STOP requested ({reason}): the current chunk completes, no further chunk is keyed")
             self._stop.set()
+
+    def set_level(self, tx_gain_db: Optional[float] = None, scale_db: Optional[float] = None,
+                  why: str = "operator", rx_gain_db: Optional[float] = None) -> None:
+        """Change the B210 TX gain and/or RX gain (dB) during the run, keyed or not, from any
+        thread: applied at once, logged, and recorded in the session JSON (level_events) so
+        the report's reader knows what drive the amplifier saw and what receive gain the
+        archive was taken at (Rick, 2026-10-23: the final amplifier is being brought up
+        during the Venus days). The digital scale is the generator's knob only; here it is
+        noted and ignored."""
+        if tx_gain_db is not None:
+            g = float(tx_gain_db)
+            tx = getattr(self.radio, "tx", None)
+            if tx is not None and hasattr(tx, "set_gain"):
+                tx.set_gain(g, 0)
+            t = self.radio.device_time()
+            self.report.level_events.append({"t": t, "tx_gain_db": g, "why": why})
+            self.log(f"TX gain {g:.2f} dB ({why}) at {iso_utc(t, 0)[11:19]}Z, "
+                     f"{'keyed' if self.keyer.keyed else 'not keyed'}")
+        if rx_gain_db is not None:
+            g = float(rx_gain_db)
+            rx = getattr(self.radio, "rx", None)
+            if rx is not None and hasattr(rx, "set_gain"):
+                rx.set_gain(g)
+            t = self.radio.device_time()
+            self.report.level_events.append({"t": t, "rx_gain_db": g, "why": why})
+            self.log(f"RX gain {g:.2f} dB ({why}) at {iso_utc(t, 0)[11:19]}Z")
+        if scale_db is not None:
+            self.log(f"digital scale {float(scale_db):+.1f} dB requested: not adjustable in a session (the generator's knob)")
 
     # ---- keyer ---------------------------------------------------------------------------------
     def _end_after(self, c) -> None:

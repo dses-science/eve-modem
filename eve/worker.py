@@ -507,12 +507,19 @@ class Runner:
             if self.poll_commands is not None:
                 for cmd in self.poll_commands():
                     try:
-                        if cmd[0] == "stop" and not hasattr(sess, "set_level"):
-                            sess.stop(str(cmd[1]) if len(cmd) > 1 else "operator stop")    # Session: after this chunk
-                        elif not hasattr(sess, "set_level"):
-                            continue                                                        # generator commands only
+                        gen = hasattr(sess, "set_signal")          # the generator session; else a Session
+                        if cmd[0] == "stop":
+                            if gen:
+                                sess.stop()
+                            else:
+                                sess.stop(str(cmd[1]) if len(cmd) > 1 else "operator stop")    # after this chunk
+                        elif cmd[0] == "level" and gen:
+                            sess.set_level(tx_gain_db=cmd[1], scale_db=cmd[2])    # the generator's knobs
                         elif cmd[0] == "level":
-                            sess.set_level(tx_gain_db=cmd[1], scale_db=cmd[2])
+                            sess.set_level(tx_gain_db=cmd[1], scale_db=cmd[2],    # TX and RX gain live (2026-10-23)
+                                           rx_gain_db=cmd[3] if len(cmd) > 3 else None)
+                        elif not gen:
+                            continue                                                        # generator commands only
                         elif cmd[0] == "key":
                             threading.Thread(target=sess.key, args=(bool(cmd[1]),), kwargs={"why": "operator"}, daemon=True).start()
                         elif cmd[0] == "signal":

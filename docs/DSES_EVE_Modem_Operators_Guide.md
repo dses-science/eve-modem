@@ -4,7 +4,7 @@
 | | |
 |---|---|
 | Document | DSES EVE Modem Operator's Guide |
-| Revision | Rev C — DRAFT (program 1.0.20) |
+| Revision | Rev C — DRAFT (program 1.0.21) |
 | Date | 2026-10-23 |
 | Prepared by | Rick Hambly, K0GD, Deep Space Exploration Society |
 | Funding | Supported by a grant from Amateur Radio Digital Communications. |
@@ -147,9 +147,13 @@ interop drops the pilot) and says so in the teal line under the run modes.
 
 ## 4.3 Radio and reference
 
-- **TX gain** 0 dB on the bench; 55 dB is the Moon and Venus default. The driver's input
+- **TX gain** 0 dB on the bench; 55 dB is the Moon and Venus default. It can be turned
+  while a run is going, in any mode: the new gain is applied at once, logged with its time
+  and written to the session JSON, so the drive the amplifier saw is on record. The driver's input
   pad decides the final figure; the signal generator mode (4.6) measures it.
-- **RX gain**: set so the background of the tone strip is visible but not saturated
+- **RX gain**: set so the background of the tone strip is visible but not saturated;
+  like the TX gain it can be turned while a run is going (applied at once, logged, in the
+  session JSON)
   (30 dB on the bench, 40 to 50 dB behind the LNA).
 - **Ports**: the B210 has two frontends, A and B, each with a TX/RX and an RX2 port.
   The station is wired TX on **A** (TX/RX A to the driver) and RX on **A : RX2** (the

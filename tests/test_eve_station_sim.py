@@ -95,6 +95,9 @@ def test_sim_session_stops_after_the_current_chunk():
         sess = Session(sched, model, radio, opts)
         # stop during the second chunk's key-down: that chunk completes, the third is never keyed
         t_stop = sched.chunks[1].tx_start + 0.5
+        # the operator turns the TX gain during chunk 1 (recorded; the simulated radio has no gain)
+        threading.Timer(max(0.1, sched.chunks[0].tx_start + 0.3 - time.time()), sess.set_level,
+                        kwargs={"tx_gain_db": 40.0, "rx_gain_db": 35.0, "why": "test"}).start()
         threading.Timer(max(0.1, t_stop - time.time()), sess.stop, args=("test stop",)).start()
         t_run = time.time()
         rep = sess.run()
@@ -107,6 +110,8 @@ def test_sim_session_stops_after_the_current_chunk():
         assert len(files) <= 3                                      # at most a partial third window, nothing beyond
         log = json.loads((Path(d) / "SIMSTOP_session.json").read_text())
         assert log["stopped_early"] and log["chunks_keyed"] == 2
+        assert log["level_events"][0]["tx_gain_db"] == 40.0 and log["level_events"][0]["why"] == "test"
+        assert log["level_events"][1]["rx_gain_db"] == 35.0
         acc, _ = decode_archive(d, sched, verbose=False)            # decodes what it has, no error
         assert acc.frames_seen <= 3 * 6
 

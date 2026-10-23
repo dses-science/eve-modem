@@ -137,10 +137,10 @@ TIPS: Dict[str, str] = {
                     "frames are a decisive check at EME strength, and every pilot frame on the Moon displaces a data frame.",
     "serial": "B210 serial number, or blank for the first B2xx found on USB. The Haswell radio and the bench clone "
               "have different serials; set it when both are plugged in.",
-    "tx_gain": "B210 transmit gain, 0 to 89.75 dB. 0 dB for the loopback bench (the leakage is enough). On the air "
+    "tx_gain": "Changes LIVE during any run (applied at once, logged with its time, recorded in the session JSON): turn it down if the driver or the final amplifier misbehaves. B210 transmit gain, 0 to 89.75 dB. 0 dB for the loopback bench (the leakage is enough). On the air "
                "55 dB is the Moon and Venus default; the driver's input pad decides the final figure, and the "
                "signal generator mode measures it (section 4.6). Never exceed what the driver's input pad expects (design 7.1, O4).",
-    "rx_gain": "B210 receive gain. Set it so the receiver noise sits 10 to 15 dB above the B210's own floor: watch the "
+    "rx_gain": "Changes LIVE during any run (applied at once, logged, recorded in the session JSON). B210 receive gain. Set it so the receiver noise sits 10 to 15 dB above the B210's own floor: watch the "
                "tone strip's background on the Run tab. 30 dB on the bench; 40 to 50 dB behind the LNA.",
     "clock": "external: 10 MHz on REF IN and 1 PPS on PPS IN from the station GPS clock (the standard). gpsdo: an "
              "Ettus GPSDO board inside the B210. internal: the B210's own TCXO, bench only, no lock check, +/-2 ppm.",
@@ -1173,12 +1173,13 @@ class EveApp(QtWidgets.QMainWindow):
         sp.setRange(0.0, 89.75)
         sp.setSuffix(" dB")
         sp.setToolTip("0 dB for the loopback bench (internal leakage is enough); the driver's input requirement sets it for the air. "
-                      "In the signal generator it applies while running.")
+                      "Applies at once while a run is going.")
         sp.valueChanged.connect(lambda v: self._live_level(tx_gain_db=float(v)))
         f.addRow("TX gain", sp)
         self.w["rx_gain"] = sp = QtWidgets.QDoubleSpinBox()
         sp.setRange(0.0, 76.0)
         sp.setSuffix(" dB")
+        sp.valueChanged.connect(lambda v: self._live_level(rx_gain_db=float(v)))
         f.addRow("RX gain", sp)
         prow = QtWidgets.QHBoxLayout()
         self.w["tx_port"] = cb = QtWidgets.QComboBox()
@@ -1967,13 +1968,19 @@ class EveApp(QtWidgets.QMainWindow):
             except Exception:
                 pass
 
-    def _live_level(self, tx_gain_db=None, scale_db=None) -> None:
-        """TX gain or digital scale changed while a signal-generator run is active: send the
-        changed value to the worker (applied at once; recorded as a level step). Only the
-        changed one goes, so turning the scale during a sweep leaves the sweep's gain alone."""
-        if self.mode() == "siggen" and self.ctl.busy and self.ctl.conn is not None and not self._loading:
+    def _live_level(self, tx_gain_db=None, scale_db=None, rx_gain_db=None) -> None:
+        """TX or RX gain changed while a run is active (any mode; the digital scale only for the
+        signal generator): send the changed value to the worker, which applies it at once and
+        records it (the generator's level step, the session's level_events). Only the changed
+        one goes, so turning the scale during a sweep leaves the sweep's gain alone. Rick,
+        2026-10-23: the final amplifier's drive must be adjustable during a Venus run."""
+        if self.ctl.busy and self.ctl.conn is not None and not self._loading and self.ctl.session is not None:
+            if (scale_db is not None or rx_gain_db is not None) and self.mode() == "siggen" and tx_gain_db is None and scale_db is None:
+                return                      # the generator has no receive side
+            if scale_db is not None and self.mode() != "siggen":
+                return                      # the digital scale is the generator's knob
             try:
-                self.ctl.conn.send(("level", tx_gain_db, scale_db))
+                self.ctl.conn.send(("level", tx_gain_db, scale_db, rx_gain_db))
             except Exception:
                 pass
 
