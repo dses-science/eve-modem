@@ -1615,7 +1615,11 @@ class EveApp(QtWidgets.QMainWindow):
         for key, wd in self.w.items():
             v = s.get(key)
             if key == "keyer_kind":
+                # the INI holds the worker's kind name ('sequencer', what _values() saves), the
+                # combo its label: map it back, or the field came up 'none' on every restart and
+                # the day's Venus runs at Haswell keyed nothing (2026-10-23)
                 v = _LEGACY_KEYER_KINDS.get(str(v), v)
+                v = {kind: label for label, kind in KEYER_KINDS.items()}.get(str(v), v)
             if isinstance(wd, QtWidgets.QCheckBox):
                 wd.setChecked(bool(v))
             elif isinstance(wd, QtWidgets.QComboBox):

@@ -204,7 +204,18 @@ def test_eme_defaults_fit_the_moon_chunk(tmp_path):
     win.settings.sync()
     win._load()
     assert win.w["sky_start_kind"].currentText() == "now +"
+    # the switching choice survives a restart: saved as the worker's kind name, loaded back to
+    # its label (it came up 'none' on every restart before 1.0.20; Haswell, 2026-10-23)
+    select("eve")
+    win._set_defaults()
+    assert win._values()["keyer_kind"] == "sequencer"
+    win._save()
+    assert win.settings.q.value("keyer_kind") == "sequencer"
     win.close()
+    win2 = A.EveApp()
+    assert win2.w["keyer_kind"].currentText() == "TX key + LNA (USB relay board + B210 GPIO)"
+    assert win2._values()["keyer_kind"] == "sequencer"
+    win2.close()
 
 
 if __name__ == "__main__":
