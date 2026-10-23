@@ -454,6 +454,20 @@ def open_pdf(path) -> None:
     QtGui.QDesktopServices.openUrl(QtCore.QUrl.fromLocalFile(path))
 
 
+class NoWheelUnlessFocused(QtCore.QObject):
+    """Event filter for the Setup tab's spin boxes and combos: the mouse wheel changes them
+    only when they have keyboard focus (clicked into). The Setup page is a scroll area, so a
+    wheel scroll that passed over the TX gain field stepped it 0.25 dB a notch; on the Pi the
+    field read 61 dB after a page scroll where 55 had been saved (2026-10-23), and from 1.0.21
+    a run takes gain changes live. Wheel events reach the scroll area instead."""
+
+    def eventFilter(self, obj, ev):
+        if ev.type() == QtCore.QEvent.Wheel and not obj.hasFocus():
+            ev.ignore()
+            return True
+        return False
+
+
 class RunController(QtCore.QObject):
     """Runs one job at a time in a worker process (eve.worker.run_job) and turns the worker's
     pipe messages into Qt signals for the window: log(text), state(preparing | running |
@@ -1512,9 +1526,13 @@ class EveApp(QtWidgets.QMainWindow):
         # form shrinks with the splitter yet the fields fill the row. NOT QSizePolicy.Ignored:
         # on macOS Qt's form layout (FieldsStayAtSizeHint) laid Ignored fields out at zero
         # width and the Setup page showed no fields at all (1.0.2, 2026-09-14).
+        self._no_wheel = NoWheelUnlessFocused(self)
         for wdg in left_w.findChildren(QtWidgets.QWidget):
             if not isinstance(wdg, (QtWidgets.QLineEdit, QtWidgets.QComboBox, QtWidgets.QAbstractSpinBox)):
                 continue
+            if isinstance(wdg, (QtWidgets.QComboBox, QtWidgets.QAbstractSpinBox)):
+                wdg.setFocusPolicy(QtCore.Qt.StrongFocus)       # not WheelFocus: the wheel alone never grabs it
+                wdg.installEventFilter(self._no_wheel)
             wdg.setMinimumWidth(90)
             pol = wdg.sizePolicy()
             pol.setHorizontalPolicy(QtWidgets.QSizePolicy.Expanding)

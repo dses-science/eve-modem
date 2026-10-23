@@ -4,7 +4,7 @@
 | | |
 |---|---|
 | Document | DSES EVE Modem Operator's Guide |
-| Revision | Rev C — DRAFT (program 1.0.21) |
+| Revision | Rev C — DRAFT (program 1.0.22) |
 | Date | 2026-10-23 |
 | Prepared by | Rick Hambly, K0GD, Deep Space Exploration Society |
 | Funding | Supported by a grant from Amateur Radio Digital Communications. |
@@ -149,7 +149,9 @@ interop drops the pilot) and says so in the teal line under the run modes.
 
 - **TX gain** 0 dB on the bench; 55 dB is the Moon and Venus default. It can be turned
   while a run is going, in any mode: the new gain is applied at once, logged with its time
-  and written to the session JSON, so the drive the amplifier saw is on record. The driver's input
+  and written to the session JSON, so the drive the amplifier saw is on record. The mouse
+  wheel changes a field only after you have clicked into it, so scrolling the Setup page
+  cannot move the gain. The driver's input
   pad decides the final figure; the signal generator mode (4.6) measures it.
 - **RX gain**: set so the background of the tone strip is visible but not saturated;
   like the TX gain it can be turned while a run is going (applied at once, logged, in the
