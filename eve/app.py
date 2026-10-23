@@ -39,7 +39,7 @@ from .doppler import iso_utc
 import numpy as np
 
 from . import modem
-from .display import OperatorPanel, NAVY, TEAL, mono, ABORT_STYLE, STOP_STYLE, wrap_tooltips
+from .display import OperatorPanel, NAVY, TEAL, mono, ABORT_STYLE, STOP_STYLE, wrap_tooltips, css, px, set_ui_scale, ui_scale
 
 MODES = [("sim", "Software simulation (no radio)"),
          ("bench", "Bench loopback (one B210, no antenna)"),
@@ -285,6 +285,7 @@ class Settings:
         "eme_chunk_s": 2.4, "eme_pa": False, "eme_t_off_min": 0.5, "eme_rtt_guard": 0.1, "eme_t_on_max": 300.0,
         "interop_dir": "Transmit only (the partner receives)", "interop_chunk_s": 300.0, "interop_search_frames": 30,
         "report_zoom": 100,
+        "ui_scale": 0.0,          # 0 = automatic from the screen height (1080 px = 1.0); else the factor
         "keyer_kind": "none", "keyer_port": "auto", "keyer_lna_guard_ms": 50, "keyer_lna_release_ms": 50,
         "siggen_signal": "CW", "siggen_offset_khz": 0.0, "siggen_spacing_khz": 10.0, "siggen_level_db": -3.0,
         "siggen_pa": False, "siggen_sim": False, "siggen_sweep": False, "siggen_sweep_start_db": 0.0,
@@ -685,7 +686,7 @@ class ReportPane(QtWidgets.QWidget):
         lay.setContentsMargins(0, 0, 0, 0)
         self.header = QtWidgets.QLabel("no report selected")
         self.header.setWordWrap(True)
-        self.header.setStyleSheet(f"font-weight: bold; color: white; background: {TEAL}; padding: 4px 8px;")
+        self.header.setStyleSheet(css(f"font-weight: bold; color: white; background: {TEAL}; padding: 4px 8px;"))
         lay.addWidget(self.header)
         self.scroll = QtWidgets.QScrollArea()
         self.scroll.setWidgetResizable(True)
@@ -1017,9 +1018,8 @@ class EveApp(QtWidgets.QMainWindow):
         pol.setHorizontalPolicy(QtWidgets.QSizePolicy.Ignored)
         self.status.setSizePolicy(pol)
         self.statusBar().addWidget(self.status, 1)
-        lbl_ini = QtWidgets.QLabel(f"settings: {self.settings.path}")
-        lbl_ini.setSizePolicy(pol)
-        lbl_ini.setMinimumWidth(120)
+        lbl_ini = QtWidgets.QLabel(f"settings: {Path(str(self.settings.path)).name}")   # the file name; the path in the tip
+        lbl_ini.setMinimumWidth(lbl_ini.fontMetrics().horizontalAdvance(lbl_ini.text()) + 12)   # never clipped to 'sett'
         lbl_ini.setToolTip(str(self.settings.path))
         self.statusBar().addPermanentWidget(lbl_ini)
         filem = self.menuBar().addMenu("&File")
@@ -1033,6 +1033,16 @@ class EveApp(QtWidgets.QMainWindow):
         a.setShortcut("Ctrl+Q")
         a.setMenuRole(QtGui.QAction.QuitRole)
         a.triggered.connect(self.close)          # goes through closeEvent: abort prompt, settings saved
+        viewm = self.menuBar().addMenu("&View")
+        a = viewm.addAction("Text size larger")
+        a.setShortcut("Ctrl+=")
+        a.triggered.connect(lambda: self._set_text_size(+1))
+        a = viewm.addAction("Text size smaller")
+        a.setShortcut("Ctrl+-")
+        a.triggered.connect(lambda: self._set_text_size(-1))
+        a = viewm.addAction("Text size automatic (from the screen)")
+        a.setShortcut("Ctrl+0")
+        a.triggered.connect(lambda: self._set_text_size(0))
         helpm = self.menuBar().addMenu("&Help")
         a = helpm.addAction("Operator's guide")
         a.setShortcut("F1")
@@ -1071,7 +1081,8 @@ class EveApp(QtWidgets.QMainWindow):
         if geo is not None:
             self.restoreGeometry(geo)
         else:
-            self.resize(1320, 880)
+            self.resize(px(1320), px(880))
+        self._clamp_to_screen()
         self._update_dialog = None
         self._installer = None
         self._start_update_check()
@@ -1115,13 +1126,13 @@ class EveApp(QtWidgets.QMainWindow):
         self.mode_group.idClicked.connect(lambda _i: self._mode_changed(user=True))
         self.btn_defaults = QtWidgets.QPushButton("Set defaults for this run mode")
         self.btn_defaults.setToolTip(TIPS["set_defaults"])
-        self.btn_defaults.setStyleSheet(HIGHLIGHT_STYLE)      # the first thing to press after choosing a mode
+        self.btn_defaults.setStyleSheet(css(HIGHLIGHT_STYLE))      # the first thing to press after choosing a mode
         self.btn_defaults.clicked.connect(self._set_defaults)
         v.addWidget(self.btn_defaults)
         self.lbl_coherence = QtWidgets.QLabel("")
         self.lbl_coherence.setWordWrap(True)
         self.lbl_coherence.setWordWrap(True)
-        self.lbl_coherence.setStyleSheet(f"color: {TEAL};")
+        self.lbl_coherence.setStyleSheet(css(f"color: {TEAL};"))
         v.addWidget(self.lbl_coherence)
         left.addWidget(gb)
 
@@ -1175,7 +1186,7 @@ class EveApp(QtWidgets.QMainWindow):
         self.lbl_sym = QtWidgets.QLabel()
         self.lbl_sym.setWordWrap(True)
         self.lbl_sym.setWordWrap(True)
-        self.lbl_sym.setStyleSheet(f"color: {TEAL};")
+        self.lbl_sym.setStyleSheet(css(f"color: {TEAL};"))
         f.addRow("", self.lbl_sym)
         left.addWidget(gb)
 
@@ -1218,7 +1229,7 @@ class EveApp(QtWidgets.QMainWindow):
         self.lbl_ports = QtWidgets.QLabel("")
         self.lbl_ports.setWordWrap(True)
         self.lbl_ports.setWordWrap(True)
-        self.lbl_ports.setStyleSheet(f"color: {TEAL};")
+        self.lbl_ports.setStyleSheet(css(f"color: {TEAL};"))
         f.addRow("", self.lbl_ports)
         self.w["clock"] = cb = QtWidgets.QComboBox()
         cb.addItems(["external", "gpsdo", "internal"])
@@ -1291,7 +1302,7 @@ class EveApp(QtWidgets.QMainWindow):
         self.lbl_keyer = QtWidgets.QLabel("")
         self.lbl_keyer.setWordWrap(True)
         self.lbl_keyer.setWordWrap(True)
-        self.lbl_keyer.setStyleSheet(f"color: {TEAL};")
+        self.lbl_keyer.setStyleSheet(css(f"color: {TEAL};"))
         f.addRow("", self.lbl_keyer)
         left.addWidget(gb)
         self._refresh_ports()
@@ -1390,7 +1401,7 @@ class EveApp(QtWidgets.QMainWindow):
                                            "sequencer. Signal, offset, spacing, TX gain (Radio group) and the digital "
                                            "scale apply at once while it runs. The report lists every key event and step.")
         self.lbl_siggen.setWordWrap(True)
-        self.lbl_siggen.setStyleSheet(f"color: {TEAL};")
+        self.lbl_siggen.setStyleSheet(css(f"color: {TEAL};"))
         f.addRow("", self.lbl_siggen)
         self.mode_stack.addWidget(gb)
 
@@ -1412,7 +1423,7 @@ class EveApp(QtWidgets.QMainWindow):
         lbl = QtWidgets.QLabel("Both ends use Variant A, full-length symbols, the same dial frequency, the same message, "
                                "and the same UTC start (below). The ORI generator sends no pilot: untick Pilot when receiving from it.")
         lbl.setWordWrap(True)
-        lbl.setStyleSheet(f"color: {TEAL};")
+        lbl.setStyleSheet(css(f"color: {TEAL};"))
         f.addRow("", lbl)
         self.mode_stack.addWidget(gb)
         # eme
@@ -1501,7 +1512,7 @@ class EveApp(QtWidgets.QMainWindow):
         dt.setCalendarPopup(True)
         prow.addWidget(dt)
         self.lbl_stop = QtWidgets.QLabel("and when the target sets below the minimum elevation")
-        self.lbl_stop.setStyleSheet(f"color: {TEAL};")
+        self.lbl_stop.setStyleSheet(css(f"color: {TEAL};"))
         self.lbl_stop.setWordWrap(True)
         prow.addWidget(self.lbl_stop)
         prow.addStretch(1)
@@ -1547,7 +1558,7 @@ class EveApp(QtWidgets.QMainWindow):
         right.addWidget(QtWidgets.QLabel("Schedule preview"))
         self.preview = QtWidgets.QPlainTextEdit()
         self.preview.setReadOnly(True)
-        self.preview.setStyleSheet(mono() + " font-size: 11px;")
+        self.preview.setStyleSheet(css(mono() + " font-size: 11px;"))
         right.addWidget(self.preview, 1)
         brow = QtWidgets.QHBoxLayout()
         self.btn_preview = QtWidgets.QPushButton("Preview schedule")
@@ -1558,28 +1569,28 @@ class EveApp(QtWidgets.QMainWindow):
         self.btn_ops.clicked.connect(self._ops_schedule)
         brow.addWidget(self.btn_ops)
         self.btn_start = QtWidgets.QPushButton("START")
-        self.btn_start.setStyleSheet(f"background: {TEAL}; color: white; font-weight: bold; padding: 8px; font-size: 14px;")
+        self.btn_start.setStyleSheet(css(f"background: {TEAL}; color: white; font-weight: bold; padding: 8px; font-size: 14px;"))
         self.btn_start.clicked.connect(self._start)
         brow.addWidget(self.btn_start)
         self.btn_abort = QtWidgets.QPushButton("ABORT")
-        self.btn_abort.setStyleSheet(ABORT_STYLE + " QPushButton { padding: 8px; font-size: 14px; }")
+        self.btn_abort.setStyleSheet(css(ABORT_STYLE + " QPushButton { padding: 8px; font-size: 14px; }"))
         self.btn_abort.clicked.connect(lambda: self.ctl.abort("operator abort from the Setup tab"))
         self.btn_abort.setEnabled(False)
         brow.addWidget(self.btn_abort)
         self.btn_stop = QtWidgets.QPushButton("STOP after chunk")
-        self.btn_stop.setStyleSheet(STOP_STYLE + " QPushButton { padding: 8px; font-size: 14px; }")
+        self.btn_stop.setStyleSheet(css(STOP_STYLE + " QPushButton { padding: 8px; font-size: 14px; }"))
         self.btn_stop.clicked.connect(lambda: self.ctl.stop("operator stop from the Setup tab"))
         self.btn_stop.setEnabled(False)
         brow.addWidget(self.btn_stop)
         right.addLayout(brow)
         self.btn_save = QtWidgets.QPushButton("Save settings now")
-        self.btn_save.setStyleSheet(HIGHLIGHT_STYLE)
+        self.btn_save.setStyleSheet(css(HIGHLIGHT_STYLE))
         self.btn_save.clicked.connect(self._save)
         right.addWidget(self.btn_save)
         self.setup_log = QtWidgets.QPlainTextEdit()
         self.setup_log.setReadOnly(True)
         self.setup_log.setMaximumBlockCount(500)
-        self.setup_log.setStyleSheet(mono() + " font-size: 11px;")
+        self.setup_log.setStyleSheet(css(mono() + " font-size: 11px;"))
         right.addWidget(self.setup_log, 1)
         # operator help on every control, and on its row label
         for key, wd in self.w.items():
@@ -1966,11 +1977,11 @@ class EveApp(QtWidgets.QMainWindow):
         if rx.endswith("TX/RX") and rx.startswith(tx):
             self.lbl_ports.setText(f"Not allowed: receive on {rx} while frontend {tx} transmits. Pick an RX2 port "
                                    f"or the other frontend's TX/RX.")
-            self.lbl_ports.setStyleSheet("color: #c0392b;")
+            self.lbl_ports.setStyleSheet(css("color: #c0392b;"))
         elif tx != "A" or rx != "A : RX2":
             self.lbl_ports.setText(f"TX on frontend {tx}, RX on {rx}: not the station wiring (TX/RX A to the driver, "
                                    f"LNA to RX2 A). Fine on the bench; on the air move the cables to match.")
-            self.lbl_ports.setStyleSheet(f"color: {TEAL};")
+            self.lbl_ports.setStyleSheet(css(f"color: {TEAL};"))
         else:
             self.lbl_ports.setText("")
 
@@ -2150,14 +2161,14 @@ class EveApp(QtWidgets.QMainWindow):
         bar = QtWidgets.QGroupBox("Signal generator")
         h = QtWidgets.QHBoxLayout(bar)
         self.btn_gen_key = QtWidgets.QPushButton("KEY")
-        self.btn_gen_key.setStyleSheet("QPushButton { background: #c0392b; color: white; font-weight: bold; padding: 8px 18px; font-size: 14px; }"
-                                       "QPushButton:disabled { background: #d9a7a1; color: #f4f4f4; }")
+        self.btn_gen_key.setStyleSheet(css("QPushButton { background: #c0392b; color: white; font-weight: bold; padding: 8px 18px; font-size: 14px; }"
+                                       "QPushButton:disabled { background: #d9a7a1; color: #f4f4f4; }"))
         self.btn_gen_key.setToolTip("Key the transmitter: LNA off, guard, TX key (relay 1 / GPIO_0), then the RF after the key lead. "
                                     "With the amplifier limits ticked the key is released after 300 s and refused for 240 s after a release.")
         self.btn_gen_key.clicked.connect(lambda: self._gen_command("key", True))
         self.btn_gen_unkey = QtWidgets.QPushButton("UNKEY")
-        self.btn_gen_unkey.setStyleSheet("QPushButton { background: #1e7d3a; color: white; font-weight: bold; padding: 8px 18px; font-size: 14px; }"
-                                         "QPushButton:disabled { background: #a6c9b0; color: #f4f4f4; }")
+        self.btn_gen_unkey.setStyleSheet(css("QPushButton { background: #1e7d3a; color: white; font-weight: bold; padding: 8px 18px; font-size: 14px; }"
+                                         "QPushButton:disabled { background: #a6c9b0; color: #f4f4f4; }"))
         self.btn_gen_unkey.setToolTip("Release the transmitter: RF off, key lag, TX key off, release, LNA on. The generator stays up; KEY again when ready.")
         self.btn_gen_unkey.clicked.connect(lambda: self._gen_command("key", False))
         self.btn_gen_sweep = QtWidgets.QPushButton("Sweep")
@@ -2171,7 +2182,7 @@ class EveApp(QtWidgets.QMainWindow):
             h.addWidget(b)
         self.lbl_gen = QtWidgets.QLabel("TX gain, digital scale and the signal change live on the Setup tab.")
         self.lbl_gen.setWordWrap(True)
-        self.lbl_gen.setStyleSheet(f"color: {TEAL};")
+        self.lbl_gen.setStyleSheet(css(f"color: {TEAL};"))
         h.addWidget(self.lbl_gen, 1)
         bar.setVisible(False)
         self.gen_bar = bar
@@ -2341,6 +2352,35 @@ class EveApp(QtWidgets.QMainWindow):
         self._help_dlg.show()
         self._help_dlg.raise_()
 
+    def _clamp_to_screen(self) -> None:
+        """Keep the window inside the screen it opens on: a geometry saved on a bigger
+        display (the Pi's desktop went from 1920 x 1080 to 1440 x 900, 2026-10-23) must not
+        leave the right or bottom edge off screen."""
+        scr = self.screen() or QtGui.QGuiApplication.primaryScreen()
+        if scr is None:
+            return
+        avail = scr.availableGeometry()
+        g = self.frameGeometry()
+        w = min(g.width(), avail.width())
+        h = min(g.height(), avail.height())
+        x = min(max(g.x(), avail.x()), avail.x() + avail.width() - w)
+        y = min(max(g.y(), avail.y()), avail.y() + avail.height() - h)
+        if (w, h, x, y) != (g.width(), g.height(), g.x(), g.y()):
+            self.setGeometry(x + (self.geometry().x() - g.x()), y + (self.geometry().y() - g.y()),
+                             w - (g.width() - self.geometry().width()), h - (g.height() - self.geometry().height()))
+
+    def _set_text_size(self, step: int) -> None:
+        """View menu: text size larger (+1), smaller (-1) or automatic (0). The factor is
+        stored and applies at the next start (every style sheet is built from it)."""
+        cur = float(self.settings.get("ui_scale")) or ui_scale()
+        new = 0.0 if step == 0 else round(max(0.6, min(2.5, cur + 0.1 * step)), 2)
+        self.settings.set("ui_scale", new)
+        self.settings.sync()
+        msg = ("text size automatic (from the screen height)" if new == 0.0 else f"text size {new:.1f} x") + \
+              " at the next start of the program (now " + f"{ui_scale():.2f} x)"
+        self.status.setText(msg)
+        self._log(msg)
+
     def closeEvent(self, ev: QtGui.QCloseEvent) -> None:
         """Window close (also File > Exit): confirm when a run is in progress and abort it,
         save the settings, and stop the worker process."""
@@ -2356,11 +2396,34 @@ class EveApp(QtWidgets.QMainWindow):
         ev.accept()
 
 
+def apply_ui_scale(app: QtWidgets.QApplication) -> float:
+    """Size the user interface for the screen before any widget exists: the ui_scale
+    setting when set, else the primary screen's height over 1080 (a 1440 x 900 desktop
+    gives 0.83, a 2560 x 1440 monitor 1.33), within 0.6 to 2.5. Every style sheet's pixel
+    sizes (css) and the application font follow it. Returns the factor."""
+    try:
+        q = QtCore.QSettings(QtCore.QSettings.IniFormat, QtCore.QSettings.UserScope, "DSES", "EVE_Modem")
+        scale = float(q.value("ui_scale", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        scale = 0.0
+    if scale <= 0.0:
+        scr = app.primaryScreen()
+        h = scr.availableGeometry().height() if scr is not None else 1080
+        scale = max(0.6, min(2.5, h / 1080.0))
+    set_ui_scale(scale)
+    f = app.font()
+    base_pt = f.pointSizeF() if f.pointSizeF() > 0 else 9.0
+    f.setPointSizeF(base_pt * scale)
+    app.setFont(f)
+    return scale
+
+
 def main(argv=None) -> int:
     """Entry point of eve_app.py: create the QApplication (name 'DSES EVE modem', window icon
     icons/eve_modem.ico), show EveApp, and return the event loop's exit code."""
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication(sys.argv if argv is None else argv)
     app.setApplicationName("DSES EVE modem")
+    apply_ui_scale(app)
     icon = Path(__file__).resolve().parents[1] / "icons" / "eve_modem.ico"
     if icon.exists():
         app.setWindowIcon(QtGui.QIcon(str(icon)))

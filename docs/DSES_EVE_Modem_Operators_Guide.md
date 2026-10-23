@@ -4,7 +4,7 @@
 | | |
 |---|---|
 | Document | DSES EVE Modem Operator's Guide |
-| Revision | Rev C — DRAFT (program 1.0.23) |
+| Revision | Rev C — DRAFT (program 1.0.24) |
 | Date | 2026-10-23 |
 | Prepared by | Rick Hambly, K0GD, Deep Space Exploration Society |
 | Funding | Supported by a grant from Amateur Radio Digital Communications. |
@@ -58,6 +58,12 @@ Double-click the **DSES EVE Modem** desktop icon (created once with
 status bar shows where the settings file is. If the program does not start, read the log:
 `%LOCALAPPDATA%\DSES\EVE_Modem\app.log` on Windows, `~/Library/Logs/DSES_EVE_Modem/app.log` on macOS,
 `~/.local/state/dses-eve-modem/app.log` on Linux. A hard crash leaves `fault.log` beside it.
+
+**Text size.** The window sizes its text and plots to the screen it starts on (a 1920 by
+1080 screen is 1.0, a 1440 by 900 desktop 0.83, a 2560 by 1440 monitor 1.33). View → Text
+size larger / smaller (Ctrl plus, Ctrl minus) steps the factor by a tenth, Ctrl 0 returns
+to automatic; the choice is kept and takes effect at the next start. A window saved on a
+bigger screen is pulled back inside the current one at start-up.
 
 **Updates.** Once a day at start-up, and whenever you choose Help → Check for updates…,
 the program asks gpstime whether a newer version is published. A newer one opens a

@@ -38,6 +38,35 @@ STRIP_MARK_DB = 6.0         # a per-frame peak this far over the strip median ge
                             # noise peaks (B210, 512 collapsed bins) reach 3.4 dB, a 25 dB-Hz signal 9-10 dB
 STRIP_MARK_PX = 8           # ... as a marker of this many screen pixels (one image pixel was invisible, Rick 2026-10-20)
 _MONO = None
+_UI_SCALE = 1.0      # set once at start-up by eve.app.main() from the screen and the setting (css, px)
+
+
+def set_ui_scale(scale: float) -> None:
+    """The factor every style-sheet pixel size is multiplied by (css()); 1.0 = the sizes as
+    written, for a 1920 x 1080 screen. Set before any widget is built."""
+    global _UI_SCALE
+    _UI_SCALE = max(0.5, min(3.0, float(scale)))
+
+
+def ui_scale() -> float:
+    """The current UI scale factor."""
+    return _UI_SCALE
+
+
+def px(n: float) -> int:
+    """A pixel size scaled by the UI scale, at least 1."""
+    return max(1, int(round(n * _UI_SCALE)))
+
+
+def css(style: str) -> str:
+    """A style sheet with every 'Npx' scaled by the UI scale (font sizes, padding, radii).
+    Every setStyleSheet call in the application goes through it, so one factor sizes the
+    whole window for the screen (Rick, 2026-10-23: a 1440 x 900 desktop, and a bigger
+    monitor on a future station computer)."""
+    import re
+    if _UI_SCALE == 1.0:
+        return style
+    return re.sub(r"(\d+(?:\.\d+)?)px", lambda m: f"{px(float(m.group(1)))}px", style)
 
 
 def mono() -> str:
@@ -69,7 +98,7 @@ def _caption(text: str) -> QtWidgets.QLabel:
     minimum width)."""
     lbl = QtWidgets.QLabel(text)
     lbl.setWordWrap(True)
-    lbl.setStyleSheet("color: #555; font-size: 11px;")
+    lbl.setStyleSheet(css("color: #555; font-size: 11px;"))
     return lbl
 
 
@@ -131,13 +160,13 @@ class OperatorPanel(QtWidgets.QWidget):
         # header: session + phase + clocks
         self.lbl_title = QtWidgets.QLabel()
         self.lbl_title.setWordWrap(True)          # the session line is long; it must not set the window width
-        self.lbl_title.setStyleSheet(f"QLabel {{ font-size: 15px; font-weight: bold; color: {NAVY}; }}")
+        self.lbl_title.setStyleSheet(css(f"QLabel {{ font-size: 15px; font-weight: bold; color: {NAVY}; }}"))
         self.lbl_phase = QtWidgets.QLabel("idle")
         self.lbl_phase.setWordWrap(True)
         self._phase_kind = None
         self.set_phase("idle", "idle")
         self.lbl_clock = QtWidgets.QLabel()
-        self.lbl_clock.setStyleSheet(mono() + " font-size: 12px;")
+        self.lbl_clock.setStyleSheet(css(mono() + " font-size: 12px;"))
         hdr = QtWidgets.QHBoxLayout()
         hdr.addWidget(self.lbl_title, 1)
         hdr.addWidget(self.lbl_phase)
@@ -195,6 +224,7 @@ class OperatorPanel(QtWidgets.QWidget):
         self.table = QtWidgets.QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(["symbol", "expected", "decided", "margin dB", "frames", "state"])
         self.table.verticalHeader().setVisible(False)
+        self.table.verticalHeader().setDefaultSectionSize(px(22))      # 11 rows fit a 900-px screen
         self.table.horizontalHeader().setSectionResizeMode(QtWidgets.QHeaderView.Stretch)
         self.table.setEditTriggers(QtWidgets.QAbstractItemView.NoEditTriggers)
         self.table.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAsNeeded)
@@ -203,9 +233,9 @@ class OperatorPanel(QtWidgets.QWidget):
         dv.addWidget(self.table)
         self.lbl_decode = QtWidgets.QLabel("no frames yet")
         self.lbl_decode.setWordWrap(True)
-        self.lbl_decode.setStyleSheet(mono())
+        self.lbl_decode.setStyleSheet(css(mono()))
         dv.addWidget(self.lbl_decode)
-        rv_all.addWidget(dec_box, 3)
+        rv_all.addWidget(dec_box, 4)
 
         sch_box = QtWidgets.QGroupBox("Schedule")
         sv = QtWidgets.QVBoxLayout(sch_box)
@@ -216,7 +246,7 @@ class OperatorPanel(QtWidgets.QWidget):
         self._countdown("", "", "idle")
         sv.addWidget(self.lbl_count)
         self.lbl_sched = QtWidgets.QLabel()
-        self.lbl_sched.setStyleSheet(mono() + " font-size: 11px;")
+        self.lbl_sched.setStyleSheet(css(mono() + " font-size: 11px;"))
         self.lbl_sched.setWordWrap(True)
         sv.addWidget(self.lbl_sched)
         self.key_lamp = QtWidgets.QLabel("KEY")
@@ -229,20 +259,20 @@ class OperatorPanel(QtWidgets.QWidget):
         rad_box = QtWidgets.QGroupBox("Radio and ephemeris")
         rv = QtWidgets.QVBoxLayout(rad_box)
         self.lbl_radio = QtWidgets.QLabel()
-        self.lbl_radio.setStyleSheet(mono() + " font-size: 11px;")
+        self.lbl_radio.setStyleSheet(css(mono() + " font-size: 11px;"))
         self.lbl_radio.setWordWrap(True)
         rv.addWidget(self.lbl_radio)
         self.lbl_eph = QtWidgets.QLabel()
-        self.lbl_eph.setStyleSheet(mono() + " font-size: 11px;")
+        self.lbl_eph.setStyleSheet(css(mono() + " font-size: 11px;"))
         self.lbl_eph.setWordWrap(True)
         rv.addWidget(self.lbl_eph)
         self.btn_stop = QtWidgets.QPushButton("STOP after this chunk")
-        self.btn_stop.setStyleSheet(STOP_STYLE)
+        self.btn_stop.setStyleSheet(css(STOP_STYLE))
         self.btn_stop.setEnabled(False)
         self.btn_stop.clicked.connect(self._stop_clicked)
         rv.addWidget(self.btn_stop)
         self.btn_abort = QtWidgets.QPushButton("ABORT — release key, stop")
-        self.btn_abort.setStyleSheet(ABORT_STYLE)
+        self.btn_abort.setStyleSheet(css(ABORT_STYLE))
         self.btn_abort.setEnabled(False)
         self.btn_abort.clicked.connect(self._abort_clicked)
         rv.addWidget(self.btn_abort)
@@ -259,7 +289,7 @@ class OperatorPanel(QtWidgets.QWidget):
         self.log = QtWidgets.QPlainTextEdit()
         self.log.setReadOnly(True)
         self.log.setMaximumBlockCount(2000)
-        self.log.setStyleSheet(mono() + " font-size: 11px;")
+        self.log.setStyleSheet(css(mono() + " font-size: 11px;"))
         self.log.setLineWrapMode(QtWidgets.QPlainTextEdit.NoWrap)
         self.vsplit = QtWidgets.QSplitter(QtCore.Qt.Vertical)
         self.vsplit.addWidget(self.hsplit)
@@ -336,16 +366,16 @@ class OperatorPanel(QtWidgets.QWidget):
     def _countdown(self, what: str, left: str, kind: str) -> None:
         """Paint the countdown label: `what` (TRANSMITTING, LISTENING, ...) and the time left,
         colored by kind (tx red, rx teal, wait slate, stop amber, idle grey)."""
-        self.lbl_count.setStyleSheet(
-            "QLabel { font-size: 22px; font-weight: bold; padding: 6px; border-radius: 4px; color: white; background: "
-            + self.COUNT_COLORS.get(kind, "#7f8c8d") + "; }")
+        self.lbl_count.setStyleSheet(css(
+            "QLabel { font-size: 18px; font-weight: bold; padding: 4px; border-radius: 4px; color: white; background: "
+            + self.COUNT_COLORS.get(kind, "#7f8c8d") + "; }"))
         self.lbl_count.setText(f"{what}   {left}".strip() if left else (what or "—"))
 
     def _lamp(self, on: bool):
         """Paint the key lamp red 'KEY DOWN' or grey 'key up'."""
-        self.key_lamp.setStyleSheet(
+        self.key_lamp.setStyleSheet(css(
             "QLabel { font-size: 16px; font-weight: bold; padding: 6px; border-radius: 4px; color: white; background: "
-            + ("#c0392b" if on else "#7f8c8d") + "; }")
+            + ("#c0392b" if on else "#7f8c8d") + "; }"))
         self.key_lamp.setText("KEY DOWN — TRANSMITTING" if on else "key up")
 
     PHASE_COLORS = {"idle": "#7f8c8d", "busy": "#B86A18", "run": TEAL, "ok": "#1e7d3a", "fail": "#c0392b"}
@@ -356,8 +386,8 @@ class OperatorPanel(QtWidgets.QWidget):
         or red for the verdict, grey when idle."""
         if kind != self._phase_kind:
             self._phase_kind = kind
-            self.lbl_phase.setStyleSheet(f"QLabel {{ font-size: 15px; font-weight: bold; color: white; background: "
-                                         f"{self.PHASE_COLORS.get(kind, TEAL)}; padding: 3px 8px; border-radius: 3px; }}")
+            self.lbl_phase.setStyleSheet(css(f"QLabel {{ font-size: 15px; font-weight: bold; color: white; background: "
+                                         f"{self.PHASE_COLORS.get(kind, TEAL)}; padding: 3px 8px; border-radius: 3px; }}"))
         if self.lbl_phase.text() != text:
             self.lbl_phase.setText(text)
 
@@ -401,7 +431,7 @@ class OperatorPanel(QtWidgets.QWidget):
             self.table.item(m, 0).setText(str(m))
             self.table.item(m, 1).setText(str(self.sched.symbols[m]))
         self.lbl_decode.setText("no frames yet")
-        self.lbl_decode.setStyleSheet(mono())
+        self.lbl_decode.setStyleSheet(css(mono()))
         self.spec_curve.setData([], [])
         self.spec_peak.setData([], [])
         s = self.sched
@@ -548,7 +578,7 @@ class OperatorPanel(QtWidgets.QWidget):
                    f"BCH {'ok' if out.bch_ok else 'fail'} ({out.bits_corrected} corrected)  CRC {'ok' if out.crc_ok else 'fail'}  "
                    f"text '{out.text}'")
             self.lbl_decode.setText(txt)
-            self.lbl_decode.setStyleSheet(mono() + " font-weight: bold; color: " + ("#1e7d3a" if out.ok else "#7f2a1e") + ";")
+            self.lbl_decode.setStyleSheet(css(mono() + " font-weight: bold; color: " + ("#1e7d3a" if out.ok else "#7f2a1e") + ";"))
         except Exception as e:
             self.lbl_decode.setText(f"decode error: {e}")
 
@@ -582,8 +612,7 @@ class OperatorPanel(QtWidgets.QWidget):
             nxt = next((c for c in s.chunks if c.tx_start > now), None)
             if nxt and not stopping:
                 lines.append(f"next chunk {nxt.index + 1} of {len(s.chunks)} in {nxt.tx_start - now:6.1f} s  ({iso_utc(nxt.tx_start, 0)[11:19]})")
-                self._countdown("WAITING FOR START" if nxt.index == 0 else f"NEXT TX (chunk {nxt.index + 1})",
-                                self._hms(nxt.tx_start - now), "wait")
+                self._countdown("WAITING FOR START" if nxt.index == 0 else "NEXT TX", self._hms(nxt.tx_start - now), "wait")
             elif phase in ("finished", "aborted") or phase.startswith("DECODED") or phase.startswith("NOT DECODED") or phase.startswith("ABORTED"):
                 lines.append("no chunks remaining")
                 self._countdown(phase.split(" ")[0], "", "idle")
@@ -595,21 +624,21 @@ class OperatorPanel(QtWidgets.QWidget):
             n = f"chunk {c.index + 1} of {len(s.chunks)}"
             if now < c.tx_start:
                 lines.append(f"{n}: TX in {c.tx_start - now:5.1f} s")
-                self._countdown(f"TX IN ({n})", self._hms(c.tx_start - now), "wait")
+                self._countdown("TX IN", self._hms(c.tx_start - now), "wait")
             elif now < c.tx_stop:
                 lines.append(f"{n}: TRANSMITTING, {c.tx_stop - now:5.1f} s left  frames {c.frame_first}-{c.frame_last}")
-                self._countdown(f"TRANSMITTING ({n})", self._hms(c.tx_stop - now), "tx")
+                self._countdown("TRANSMITTING", self._hms(c.tx_stop - now), "tx")
             elif now < c.rx_start:
                 lines.append(f"{n}: echo due in {c.rx_start - now:5.1f} s")
-                self._countdown(f"LISTENING, ECHO DUE ({n})", self._hms(c.rx_start - now), "rx")
+                self._countdown("LISTENING, ECHO DUE", self._hms(c.rx_start - now), "rx")
             elif now < c.rx_stop:
                 lines.append(f"{n}: RECEIVING echo, {c.rx_stop - now:5.1f} s left")
-                self._countdown(f"RECEIVING ECHO ({n})", self._hms(c.rx_stop - now), "rx")
+                self._countdown("RECEIVING ECHO", self._hms(c.rx_stop - now), "rx")
             else:
                 lines.append(f"{n}: done")
                 nxt = next((x for x in s.chunks if x.tx_start > now), None)
                 if nxt and not stopping:
-                    self._countdown(f"NEXT TX (chunk {nxt.index + 1})", self._hms(nxt.tx_start - now), "wait")
+                    self._countdown("NEXT TX", self._hms(nxt.tx_start - now), "wait")
                 else:
                     self._countdown("STOPPING" if stopping else "FINISHING", "", "stop" if stopping else "wait")
         done = sum(1 for c in s.chunks if now > c.rx_stop)
@@ -657,8 +686,8 @@ class OperatorPanel(QtWidgets.QWidget):
                             f"PLL {'LOCK' if st.pll_lock else 'no lock'}, signal losses {st.loss_count}")
             except Exception as e:
                 txt += f"\nGPS clock: {e}"
-        self.lbl_radio.setStyleSheet(mono() + (" font-size: 11px; color: #c0392b; font-weight: bold;"
-                                               if "TRANSMITTER UNDERRAN" in txt else " font-size: 11px;"))
+        self.lbl_radio.setStyleSheet(css(mono() + (" font-size: 11px; color: #c0392b; font-weight: bold;"
+                                               if "TRANSMITTER UNDERRAN" in txt else " font-size: 11px;")))
         self.lbl_radio.setText(txt)
         eph_remote = getattr(self.session, "eph_text", None)
         if eph_remote is not None:
