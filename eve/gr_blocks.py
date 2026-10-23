@@ -82,13 +82,33 @@ class ScheduleFrameMap(FrameMap):
         return tones
 
 
+RESYNC_LATE_S = 0.25      # samples this far behind device time = the transmit stream has stalled
+RESYNC_LEAD_S = 1.0       # the new burst starts this far ahead of device time
+RESYNC_CHECK_BLOCKS = 4   # how often the device clock is read (every 4th block, about 3 times a second)
+
+
 class EveToneSource(gr.sync_block):
-    """Schedule-driven tone source at the radio rate (see module docstring)."""
+    """Schedule-driven tone source at the radio rate (see module docstring).
+
+    RESYNC AFTER A STALL (2026-10-23, D26). The stream is one timed burst: the first sample
+    carries tx_time = t0 and gr-uhd stamps every later packet from the sample count. When
+    the host falls behind (an underflow: a CPU stall, a throttled Raspberry Pi), every
+    packet after it carries a time already past, the radio drops each one as LATE, and
+    nothing we send reaches the air again for the rest of the run (Haswell, 2026-10-20
+    and 2026-10-23). With `device_time` given, work() compares the device clock with the
+    time of the sample it is about to generate every RESYNC_CHECK_BLOCKS blocks; when the
+    stream is RESYNC_LATE_S behind, it ends the burst (tx_eob on a short block, dropped
+    like the rest), skips the backlog, and begins a new burst RESYNC_LEAD_S ahead of the
+    clock (tx_sob + tx_time on its first sample). The schedule's frames in the skipped
+    seconds are lost; the rest of the run goes out on time. `resyncs` and
+    `resync_skipped_s` count it; `on_resync(skipped_s, device_now)` is called each time."""
 
     def __init__(self, schedule, fs: float, t0_device: float,
                  doppler_hz: Optional[Callable[[np.ndarray], np.ndarray]] = None,
                  amplitude: Optional[float] = None, include_if: bool = True,
-                 t_end_device: Optional[float] = None, block_len: int = 65536, tag_time: bool = True):
+                 t_end_device: Optional[float] = None, block_len: int = 65536, tag_time: bool = True,
+                 device_time: Optional[Callable[[], float]] = None,
+                 on_resync: Optional[Callable[[float, float], None]] = None):
         gr.sync_block.__init__(self, name="eve_tone_source", in_sig=None, out_sig=[np.complex64])
         self.sched = schedule
         self.p = schedule.params
@@ -105,7 +125,51 @@ class EveToneSource(gr.sync_block):
         self.done = False
         self.tag_time = tag_time
         self._block_len = block_len
+        self._mute_from: Optional[float] = None
+        self.device_time = device_time
+        self.on_resync = on_resync
+        self.resyncs = 0
+        self.resync_skipped_s = 0.0
+        self._burst_start = True        # the next block's first sample gets the tx_time tag
+        self._resync_pending = False    # the burst was ended: the next block starts a new one
+        self._blocks = 0
         self.set_min_output_buffer(1 << 22)     # deep TX edge (self-test lesson 2026-08-05)
+
+    def _lag_s(self) -> float:
+        """How far the sample about to be generated lies BEHIND the device clock (seconds;
+        negative = the normal state, the stream runs ahead by the buffer depth)."""
+        return float(self.device_time()) - (self.t0 + self.n_out / self.fs)
+
+    def _resync(self) -> bool:
+        """Begin the new burst after a stall: skip to RESYNC_LEAD_S ahead of the device clock.
+        Returns False when that is past the end of the stream (nothing left to send)."""
+        now = float(self.device_time())
+        n_new = int(np.ceil((now + RESYNC_LEAD_S - self.t0) * self.fs))
+        skipped = (n_new - self.n_out) / self.fs
+        self.resyncs += 1
+        self.resync_skipped_s += max(0.0, skipped)
+        self._resync_pending = False
+        if n_new >= self.n_total:
+            self.n_out = self.n_total
+            if self.on_resync:
+                self.on_resync(skipped, now)
+            return False
+        self.n_out = n_new
+        self._burst_start = True
+        if self.on_resync:
+            self.on_resync(skipped, now)
+        return True
+
+    def stop_after(self, t_mute_device: float, t_end_device: float) -> None:
+        """A clean stop (Session.stop): no tone after device time t_mute_device (the frames
+        of the chunks that will not be keyed become silence, so no RF reaches the driver
+        while the transmitter is unkeyed) and the stream ends at t_end_device (the last
+        kept chunk's echo plus the end margin). Called from the keyer thread while work()
+        runs; the counters are read once per block, so the stream ends within one block of
+        the new end."""
+        self._mute_from = float(t_mute_device)
+        self.t_end = float(t_end_device)
+        self.n_total = min(self.n_total, int(np.ceil((self.t_end - self.t0) * self.fs)))
 
     def work(self, input_items, output_items):
         """GNU Radio work: emit up to block_len samples for device times t0 + n / fs, tag
@@ -114,17 +178,42 @@ class EveToneSource(gr.sync_block):
         out = output_items[0]
         if self.done:
             return -1
+        if self._resync_pending and not self._resync():
+            self.done = True
+            return -1
         n = min(len(out), self._block_len, self.n_total - self.n_out)
         if n <= 0:
             self.done = True
             return -1
+        self._blocks += 1
+        if (self.device_time is not None and self.tag_time and not self._burst_start
+                and self._blocks % RESYNC_CHECK_BLOCKS == 0):
+            try:
+                lag = self._lag_s()
+            except Exception:       # noqa: BLE001  (the radio refused the time query: try again next time)
+                lag = 0.0
+            if lag > RESYNC_LATE_S:
+                # the stream is behind: close this burst with a short silent block (it is late
+                # and dropped like the rest) and begin a new one on the next call
+                n = min(n, 64)
+                out[:n] = 0
+                self.add_item_tag(0, self.nitems_written(0) + n - 1, pmt.intern("tx_eob"), pmt.PMT_T)
+                self.n_out += n
+                self._resync_pending = True
+                return n
         n_idx = np.arange(self.n_out, self.n_out + n, dtype=np.float64)
         tones = self.map.tones_at_time(self.t0 + n_idx / self.fs)
+        if self._mute_from is not None:
+            tones[self.t0 + n_idx / self.fs >= self._mute_from] = OFF
         out[:n] = self.synth.generate_with_tones(n_idx, tones)
-        if self.n_out == 0 and self.tag_time:
-            secs = int(np.floor(self.t0))
+        if self._burst_start and self.tag_time:
+            t_first = self.t0 + self.n_out / self.fs
+            secs = int(np.floor(t_first))
+            if self.n_out > 0:
+                self.add_item_tag(0, self.nitems_written(0), pmt.intern("tx_sob"), pmt.PMT_T)
             self.add_item_tag(0, self.nitems_written(0), pmt.intern("tx_time"),
-                              pmt.make_tuple(pmt.from_uint64(secs), pmt.from_double(self.t0 - secs)))
+                              pmt.make_tuple(pmt.from_uint64(secs), pmt.from_double(t_first - secs)))
+        self._burst_start = False
         on = tones != OFF
         self.n_out += n
         self.samples_on += int(on.sum())

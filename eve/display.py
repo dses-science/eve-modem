@@ -60,6 +60,8 @@ def mono() -> str:
     return _MONO
 ABORT_STYLE = ("QPushButton { background: #c0392b; color: white; font-weight: bold; padding: 6px; }"
                "QPushButton:disabled { background: #6e2f28; color: #c8b8b6; }")
+STOP_STYLE = ("QPushButton { background: #b9770e; color: white; font-weight: bold; padding: 6px; }"
+              "QPushButton:disabled { background: #6b4c17; color: #cfc3b0; }")     # the clean stop (amber)
 
 
 def _caption(text: str) -> QtWidgets.QLabel:
@@ -205,6 +207,11 @@ class OperatorPanel(QtWidgets.QWidget):
 
         sch_box = QtWidgets.QGroupBox("Schedule")
         sv = QtWidgets.QVBoxLayout(sch_box)
+        # the countdown: what the station is doing now and how long it lasts (Rick, 2026-10-23)
+        self.lbl_count = QtWidgets.QLabel("")
+        self.lbl_count.setAlignment(QtCore.Qt.AlignCenter)
+        self._countdown("", "", "idle")
+        sv.addWidget(self.lbl_count)
         self.lbl_sched = QtWidgets.QLabel()
         self.lbl_sched.setStyleSheet(mono() + " font-size: 11px;")
         self.lbl_sched.setWordWrap(True)
@@ -225,6 +232,11 @@ class OperatorPanel(QtWidgets.QWidget):
         self.lbl_eph.setStyleSheet(mono() + " font-size: 11px;")
         self.lbl_eph.setWordWrap(True)
         rv.addWidget(self.lbl_eph)
+        self.btn_stop = QtWidgets.QPushButton("STOP after this chunk — finish its echo, then decode")
+        self.btn_stop.setStyleSheet(STOP_STYLE)
+        self.btn_stop.setEnabled(False)
+        self.btn_stop.clicked.connect(self._stop_clicked)
+        rv.addWidget(self.btn_stop)
         self.btn_abort = QtWidgets.QPushButton("ABORT — release key, stop")
         self.btn_abort.setStyleSheet(ABORT_STYLE)
         self.btn_abort.setEnabled(False)
@@ -271,6 +283,11 @@ class OperatorPanel(QtWidgets.QWidget):
                                    "and CRC state. 'CRC ok' with the right text means the message is through.")
         sch_box.setToolTip("Where the schedule stands: the chunk in progress (transmitting, waiting for the echo, "
                            "receiving), chunks complete, session start and end, time remaining, frames wanted vs received.")
+        self.lbl_count.setToolTip("What the station is doing now and how long it lasts, from the schedule on the device "
+                                  "clock: red TRANSMITTING with the time left in the chunk, teal LISTENING / RECEIVING ECHO "
+                                  "with the time until the echo window closes, slate NEXT TX or WAITING FOR START with the "
+                                  "time until the next key-down (hours:minutes:seconds for a timed start), amber STOPPING "
+                                  "after STOP. The chunk number counts the chunks of the whole schedule.")
         self.key_lamp.setToolTip("Red = the key line to the sequencer is asserted (transmitting). It rises T_lead before "
                                  "the RF and drops T_lag after it; a watchdog drops it if a chunk overruns the PA limit.")
         rad_box.setToolTip("B210 state: reference lock (must read LOCKED on the air), rates, frequencies, gains, LO "
@@ -279,6 +296,10 @@ class OperatorPanel(QtWidgets.QWidget):
         self.btn_abort.setToolTip("Release the key line immediately, stop the streams, close the archive, write the log. "
                                   "Use it for any fault: reference unlock, amplifier trouble, wrong pointing. Dim = no "
                                   "session running.")
+        self.btn_stop.setToolTip("End the run cleanly: the chunk being transmitted runs to its end and its echo is "
+                                 "received, no further chunk is keyed, and the offline decode and the report follow as "
+                                 "after a complete run (the report says how many passes were complete). Use it when the "
+                                 "window is closing or the passes in hand are enough. ABORT is the immediate version.")
         self.log.setToolTip("The session log: controller steps, keying events, radio messages, decode results.")
         self.lbl_phase.setToolTip("What the program is doing right now. Grey: idle. Amber: busy before or after the session "
                                   "(opening the radio, GPS clock, ephemeris, schedule; then draining, closing the radio, the "
@@ -291,6 +312,30 @@ class OperatorPanel(QtWidgets.QWidget):
         """ABORT button: ask the bound session to abort."""
         if self.session is not None:
             self.session.abort("operator abort from the display")
+
+    def _stop_clicked(self):
+        """STOP button: ask the bound session to end after the chunk in progress."""
+        if self.session is not None and hasattr(self.session, "stop"):
+            self.session.stop("operator stop from the display")
+            self.btn_stop.setEnabled(False)
+
+    COUNT_COLORS = {"tx": "#c0392b", "rx": TEAL, "wait": "#4a6572", "idle": "#7f8c8d", "stop": "#B86A18"}
+
+    @staticmethod
+    def _hms(seconds: float) -> str:
+        """A countdown as m:ss, or h:mm:ss from one hour; never negative."""
+        s = max(0, int(seconds + 0.999))
+        if s >= 3600:
+            return f"{s // 3600}:{s % 3600 // 60:02d}:{s % 60:02d}"
+        return f"{s // 60}:{s % 60:02d}"
+
+    def _countdown(self, what: str, left: str, kind: str) -> None:
+        """Paint the countdown label: `what` (TRANSMITTING, LISTENING, ...) and the time left,
+        colored by kind (tx red, rx teal, wait slate, stop amber, idle grey)."""
+        self.lbl_count.setStyleSheet(
+            "font-size: 26px; font-weight: bold; padding: 8px; border-radius: 4px; color: white; background: "
+            + self.COUNT_COLORS.get(kind, "#7f8c8d") + ";")
+        self.lbl_count.setText(f"{what}   {left}".strip() if left else (what or "—"))
 
     def _lamp(self, on: bool):
         """Paint the key lamp red 'KEY DOWN' or grey 'key up'."""
@@ -317,6 +362,7 @@ class OperatorPanel(QtWidgets.QWidget):
         self.lbl_title.setText("no session")
         self.set_phase("idle", "idle")
         self.lbl_sched.setText("Set up a run on the Setup tab and press Start.")
+        self._countdown("", "", "idle")
         self.lbl_eph.setText("")
         self.lbl_radio.setText("")
 
@@ -361,6 +407,7 @@ class OperatorPanel(QtWidgets.QWidget):
         session.listeners.append(self._on_frame)
         session.log = self.append_log
         self.btn_abort.setEnabled(True)
+        self.btn_stop.setEnabled(hasattr(session, "stop"))
         self._refresh_radio()
 
     def unbind(self):
@@ -375,6 +422,7 @@ class OperatorPanel(QtWidgets.QWidget):
         self.radio = None
         self.model = None
         self.btn_abort.setEnabled(False)
+        self.btn_stop.setEnabled(False)
 
     # ---- data in ------------------------------------------------------------------------------
     def _on_frame(self, k: int, x: np.ndarray, metric: np.ndarray):
@@ -514,9 +562,12 @@ class OperatorPanel(QtWidgets.QWidget):
         self.btn_abort.setEnabled(getattr(self.session, "phase_kind", "run") in ("run", "busy") and self.session.phase not in ("finished", "aborted"))
         self._lamp(bool(getattr(self.radio, "keyed", False)))
         sched_text = getattr(self.session, "sched_text", "")
+        phase = str(self.session.phase or "")
         if sched_text:                      # the signal generator writes its own pane
             self.lbl_sched.setText(sched_text)
+            self._countdown(phase.upper()[:40], "", "tx" if getattr(self.radio, "keyed", False) else "idle")
             return
+        stopping = phase.startswith("stopping") or phase.startswith("stopped")
         lines = []
         cur = None
         for c in s.chunks:
@@ -525,22 +576,38 @@ class OperatorPanel(QtWidgets.QWidget):
                 break
         if cur is None:
             nxt = next((c for c in s.chunks if c.tx_start > now), None)
-            if nxt:
+            if nxt and not stopping:
                 lines.append(f"next chunk {nxt.index + 1} of {len(s.chunks)} in {nxt.tx_start - now:6.1f} s  ({iso_utc(nxt.tx_start, 0)[11:19]})")
+                self._countdown("WAITING FOR START" if nxt.index == 0 else f"NEXT TX (chunk {nxt.index + 1})",
+                                self._hms(nxt.tx_start - now), "wait")
+            elif phase in ("finished", "aborted") or phase.startswith("DECODED") or phase.startswith("NOT DECODED") or phase.startswith("ABORTED"):
+                lines.append("no chunks remaining")
+                self._countdown(phase.split(" ")[0], "", "idle")
             else:
                 lines.append("no chunks remaining")
+                self._countdown("STOPPING" if stopping else "FINISHING", "", "stop" if stopping else "wait")
         else:
             c = cur
+            n = f"chunk {c.index + 1} of {len(s.chunks)}"
             if now < c.tx_start:
-                lines.append(f"chunk {c.index + 1} of {len(s.chunks)}: TX in {c.tx_start - now:5.1f} s")
+                lines.append(f"{n}: TX in {c.tx_start - now:5.1f} s")
+                self._countdown(f"TX IN ({n})", self._hms(c.tx_start - now), "wait")
             elif now < c.tx_stop:
-                lines.append(f"chunk {c.index + 1} of {len(s.chunks)}: TRANSMITTING, {c.tx_stop - now:5.1f} s left  frames {c.frame_first}-{c.frame_last}")
+                lines.append(f"{n}: TRANSMITTING, {c.tx_stop - now:5.1f} s left  frames {c.frame_first}-{c.frame_last}")
+                self._countdown(f"TRANSMITTING ({n})", self._hms(c.tx_stop - now), "tx")
             elif now < c.rx_start:
-                lines.append(f"chunk {c.index + 1} of {len(s.chunks)}: echo due in {c.rx_start - now:5.1f} s")
+                lines.append(f"{n}: echo due in {c.rx_start - now:5.1f} s")
+                self._countdown(f"LISTENING, ECHO DUE ({n})", self._hms(c.rx_start - now), "rx")
             elif now < c.rx_stop:
-                lines.append(f"chunk {c.index + 1} of {len(s.chunks)}: RECEIVING echo, {c.rx_stop - now:5.1f} s left")
+                lines.append(f"{n}: RECEIVING echo, {c.rx_stop - now:5.1f} s left")
+                self._countdown(f"RECEIVING ECHO ({n})", self._hms(c.rx_stop - now), "rx")
             else:
-                lines.append(f"chunk {c.index + 1} of {len(s.chunks)}: done")
+                lines.append(f"{n}: done")
+                nxt = next((x for x in s.chunks if x.tx_start > now), None)
+                if nxt and not stopping:
+                    self._countdown(f"NEXT TX (chunk {nxt.index + 1})", self._hms(nxt.tx_start - now), "wait")
+                else:
+                    self._countdown("STOPPING" if stopping else "FINISHING", "", "stop" if stopping else "wait")
         done = sum(1 for c in s.chunks if now > c.rx_stop)
         remaining = max(0.0, s.t_end - now)
         lines.append(f"chunks complete {done}/{len(s.chunks)}   session {iso_utc(s.t_start, 0)[11:19]} .. {iso_utc(s.t_end, 0)[11:19]} UTC"

@@ -39,7 +39,7 @@ from .doppler import iso_utc
 import numpy as np
 
 from . import modem
-from .display import OperatorPanel, NAVY, TEAL, mono, ABORT_STYLE, wrap_tooltips
+from .display import OperatorPanel, NAVY, TEAL, mono, ABORT_STYLE, STOP_STYLE, wrap_tooltips
 
 MODES = [("sim", "Software simulation (no radio)"),
          ("bench", "Bench loopback (one B210, no antenna)"),
@@ -51,6 +51,8 @@ PREFIX = {"sim": "SIM", "bench": "BENCH", "siggen": "SIGGEN", "interop": "INTERO
 TARGET = {"sim": "sim", "bench": "bench", "siggen": "siggen", "interop": "partner", "eme": "moon", "eve": "venus"}
 FULL_FRAMES = {"A": 473, "B": 247, "MATLAB": 540}
 KEYER_KINDS = {"none": "none", "TX key + LNA (USB relay board + B210 GPIO)": "sequencer"}
+START_KINDS = ["now +", "at UTC", "when the target rises"]     # the sky session's start (worker.py, ops.py, D26)
+STOP_KINDS = ["after the passes", "at UTC"]                      # always also at the minimum elevation
 # highlighted Setup buttons (Rick, 2026-10-20): "Set defaults for this run mode" and "Save settings now"
 HIGHLIGHT_STYLE = (f"QPushButton {{ background: #e3f1f1; color: {TEAL}; border: 2px solid {TEAL}; "
                    f"border-radius: 4px; font-weight: bold; padding: 6px; }} "
@@ -75,7 +77,7 @@ MODE_DEFAULTS = {
                "siggen_sim": False, "siggen_sweep": False, "siggen_sweep_start_db": 0.0, "siggen_sweep_stop_db": 60.0, "siggen_sweep_step_db": 5.0,
                "siggen_sweep_hold_s": 10.0, "lead_s": 15.0},
     "interop": {"variant": "A", "f_dial_mhz": 1296.0, "repeat": 1, "full_symbol": True, "pilot_frames": 40, "tx_gain": 30.0, "rx_gain": 30.0,
-                "interop_chunk_s": 300.0, "interop_search_frames": 30, "sky_start_now": True, "lead_s": 30.0},
+                "interop_chunk_s": 300.0, "interop_search_frames": 30, "sky_start_kind": "now +", "lead_s": 30.0},
     # EME: test length first (guide section 9, step 4) and a 2-frame pilot: the 2.4 s Moon chunk
     # holds six Variant A frames, so the design's 40-frame pilot can never fit it (found 2026-10-19)
     # Variant B for the Moon and Venus (design D13: the DSES 23 cm monostatic waveform, +1.1 dB; the
@@ -84,11 +86,14 @@ MODE_DEFAULTS = {
     "eme": {"keyer_kind": "TX key + LNA (USB relay board + B210 GPIO)", "variant": "B", "f_dial_mhz": 1296.0, "repeat": 2, "full_symbol": False, "pilot_frames": 1, "tx_gain": 55.0, "rx_gain": 40.0,
             "eme_chunk_s": 2.4, "eme_rtt_guard": 0.1, "eme_t_off_min": 0.5, "eme_t_on_max": 300.0, "eme_pa": False,
             "sky_mode": "monostatic", "sky_source": "auto", "sky_precomp": True, "sky_rx_doppler": False,
-            "sky_start_now": True, "lead_s": 30.0},
+            "sky_start_kind": "now +", "sky_stop_kind": "after the passes", "sky_min_el_deg": 10.0, "lead_s": 30.0},
     "eve": {"keyer_kind": "TX key + LNA (USB relay board + B210 GPIO)", "variant": "B", "f_dial_mhz": 1299.5, "repeat": 7, "full_symbol": True, "pilot_frames": 40, "tx_gain": 55.0, "rx_gain": 45.0,
             "sky_chunk_s": 240.0, "sky_rtt_guard": 30.0, "sky_t_on_max": 300.0, "sky_t_off_min": 240.0, "sky_pa": True,
+            # the Venus operating schedule (2026-10-20, D26): START any time, the run waits for Venus to
+            # reach 10 degrees, sends up to seven passes and stops when Venus drops below 10 degrees
             "sky_mode": "monostatic", "sky_source": "auto", "sky_precomp": True, "sky_rx_doppler": False,
-            "sky_start_now": True, "lead_s": 60.0},
+            "sky_start_kind": "when the target rises", "sky_stop_kind": "after the passes", "sky_min_el_deg": 10.0,
+            "lead_s": 60.0},
 }
 
 
@@ -179,10 +184,25 @@ TIPS: Dict[str, str] = {
               "of the schedule and a schedule violating them is refused.",
     "sky_mode": "monostatic: DSES transmits and receives its own echo in the gaps. bistatic_tx: DSES transmits the "
                 "whole message (chunked only by the amplifier limits) and a partner station receives.",
-    "sky_start_now": "Start the first chunk this many seconds after START (the radio needs about 8 s to arm). "
-                     "Untick to start at the UTC time on the right (for a planned session window).",
+    "sky_start_kind": "When the first chunk starts. 'now +': the lead time after START (the radio needs about 8 s "
+                      "to arm). 'at UTC': the time on the right (a planned session window; a time in the past is "
+                      "refused). 'when the target rises': the first minute the Moon or Venus is above the minimum "
+                      "elevation; press START any time before and the program waits with the radio open (the Venus "
+                      "operating schedule). The preview says which start it chose and why.",
     "lead_s": "Seconds from START to the first chunk. At least 12; 15 is comfortable. Also used by the bench.",
-    "sky_start_utc": "UTC start of the first chunk when 'start now' is unticked. The run refuses a time in the past.",
+    "sky_start_utc": "UTC start of the first chunk for the 'at UTC' start. The run refuses a time in the past.",
+    "sky_stop_kind": "When the run ends. 'after the passes': when the repeat count is sent, or when the target drops "
+                     "below the minimum elevation, whichever is first. 'at UTC': also no later than the time on the "
+                     "right. The schedule plans no chunk whose echo would arrive after the stop; the report says how "
+                     "many passes were complete. STOP on the Run tab ends a run early at the next chunk boundary.",
+    "sky_stop_utc": "UTC stop for the 'at UTC' stop: the last echo is in by this time.",
+    "sky_min_el_deg": "The elevation that bounds the run: 'when the target rises' starts at it and every run stops "
+                      "when the target falls below it (the schedule plans no chunk past that moment). 10 degrees is "
+                      "the operating schedule's floor: below it the ground fills the beam and a pass adds little.",
+    "ops_schedule": "The operating schedule for the next two weeks from one ephemeris: for each day the window above "
+                    "the minimum elevation (UTC and Mountain time), the highest elevation, how many of the repeat "
+                    "count's passes fit with the current chunking, the last echo, the range and its loss against "
+                    "the best day, and the Doppler at rise. Shown in the preview box; nothing is run.",
     "sky_source": "auto: JPL Horizons over the internet, astropy with the local DE440s if that fails. The two differ "
                   "by 10 Hz at 13 cm, so Horizons is primary (design 4.3). The table used is saved with the run.",
     "sky_precomp": "Monostatic: shift the transmit tones by minus the predicted two-way Doppler so our own echo "
@@ -256,7 +276,8 @@ class Settings:
         "tx_port": "A", "rx_port": "A : RX2",
         "bench_range_km": 0.15, "bench_chunk_s": 2.4, "bench_t_off_min": 0.5, "lead_s": 15.0,
         "sim_cn0": 20.0, "sim_range_km": 375000.0, "sim_seed": 1,
-        "sky_mode": "monostatic", "sky_start_now": True, "sky_start_utc": "", "sky_chunk_s": 240.0,
+        "sky_mode": "monostatic", "sky_start_kind": "now +", "sky_start_utc": "", "sky_chunk_s": 240.0,
+        "sky_stop_kind": "after the passes", "sky_stop_utc": "", "sky_min_el_deg": 10.0,
         "sky_pa": True, "sky_t_on_max": 300.0, "sky_t_off_min": 240.0, "sky_rtt_guard": 30.0,
         "sky_source": "auto", "sky_rx_doppler": False, "sky_precomp": True,
         "eme_chunk_s": 2.4, "eme_pa": False, "eme_t_off_min": 0.5, "eme_rtt_guard": 0.1, "eme_t_on_max": 300.0,
@@ -336,7 +357,7 @@ class RemoteSession:
     """The panel's view of a session running in the worker process: the schedule, an
     accumulator fed by the worker's frame metrics, phase and key state, status texts."""
 
-    def __init__(self, payload: Dict, abort_fn):
+    def __init__(self, payload: Dict, abort_fn, stop_fn=None):
         self.sched = S.Schedule.from_dict(payload["schedule"])
         self.p = self.sched.params
         self.model = None
@@ -350,11 +371,17 @@ class RemoteSession:
         self.listeners = []
         self.log = lambda s: None
         self._abort = abort_fn
+        self._stop = stop_fn
 
     def abort(self, reason: str) -> None:
         """Ask the worker to abort the run (the panel's ABORT button); `reason` goes to the
         session log."""
         self._abort(reason)
+
+    def stop(self, reason: str) -> None:
+        """Ask the worker to end the run after the chunk in progress (the panel's STOP button)."""
+        if self._stop is not None:
+            self._stop(reason)
 
     def frame(self, k: int, metric: np.ndarray) -> None:
         """One ("frame", k, metric) message from the worker: frame index `k` and its metric
@@ -467,6 +494,15 @@ class RunController(QtCore.QObject):
         if self.conn is not None:
             try:
                 self.conn.send(("abort", reason))
+            except Exception:
+                pass
+
+    def stop(self, reason: str = "operator stop") -> None:
+        """Send ("stop", reason) to the worker: the session finishes the chunk in progress and
+        its echo, keys no more, and goes on to the decode and the report (Session.stop)."""
+        if self.conn is not None:
+            try:
+                self.conn.send(("stop", reason))
             except Exception:
                 pass
 
@@ -607,7 +643,7 @@ class RunController(QtCore.QObject):
             self.notice.emit(msg[1])
         elif kind == "session":
             self._saw_session = True
-            self.session = RemoteSession(msg[1], self.abort)
+            self.session = RemoteSession(msg[1], self.abort, self.stop)
             self.session_ready.emit(self.session)
         elif kind == "frame":
             if self.session is not None:
@@ -1406,14 +1442,15 @@ class EveApp(QtWidgets.QMainWindow):
         cb.setToolTip("monostatic: DSES transmits and receives its own echo. bistatic_tx: DSES transmits only, a partner receives (chunked by the PA limits)")
         f.addRow("Station mode", cb)
         srow = QtWidgets.QHBoxLayout()
-        self.w["sky_start_now"] = ck = QtWidgets.QCheckBox("start now +")
-        srow.addWidget(ck)
+        self.w["sky_start_kind"] = cb = QtWidgets.QComboBox()
+        cb.addItems(START_KINDS)
+        cb.currentTextChanged.connect(lambda _t: self._start_stop_changed())
+        srow.addWidget(cb)
         self.w["lead_s"] = sp = QtWidgets.QDoubleSpinBox()
         sp.setRange(12.0, 3600.0)
         sp.setSuffix(" s")
         sp.setToolTip("seconds from Start to the first chunk (the radio needs about 8 s to arm; also used by the bench)")
         srow.addWidget(sp)
-        srow.addWidget(QtWidgets.QLabel("   or at UTC"))
         self.w["sky_start_utc"] = dt = QtWidgets.QDateTimeEdit()
         dt.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
         dt.setTimeSpec(QtCore.Qt.UTC)
@@ -1421,6 +1458,27 @@ class EveApp(QtWidgets.QMainWindow):
         srow.addWidget(dt)
         srow.addStretch(1)
         f.addRow("Start", srow)
+        # the stop: the passes, or a UTC time; always by the minimum elevation (eve/ops.py, D26)
+        prow = QtWidgets.QHBoxLayout()
+        self.w["sky_stop_kind"] = cb = QtWidgets.QComboBox()
+        cb.addItems(STOP_KINDS)
+        cb.currentTextChanged.connect(lambda _t: self._start_stop_changed())
+        prow.addWidget(cb)
+        self.w["sky_stop_utc"] = dt = QtWidgets.QDateTimeEdit()
+        dt.setDisplayFormat("yyyy-MM-dd HH:mm:ss")
+        dt.setTimeSpec(QtCore.Qt.UTC)
+        dt.setCalendarPopup(True)
+        prow.addWidget(dt)
+        self.lbl_stop = QtWidgets.QLabel("and when the target sets below the minimum elevation")
+        self.lbl_stop.setStyleSheet(f"color: {TEAL};")
+        prow.addWidget(self.lbl_stop)
+        prow.addStretch(1)
+        f.addRow("Stop", prow)
+        self.w["sky_min_el_deg"] = sp = QtWidgets.QDoubleSpinBox()
+        sp.setRange(0.0, 85.0)
+        sp.setDecimals(1)
+        sp.setSuffix(" deg")
+        f.addRow("Minimum elevation", sp)
         self.w["sky_source"] = cb = QtWidgets.QComboBox()
         cb.addItems(["auto", "horizons", "astropy"])
         cb.setToolTip("JPL Horizons (needs internet) is primary; astropy with the local DE440s is the fallback (design 4.3)")
@@ -1460,6 +1518,9 @@ class EveApp(QtWidgets.QMainWindow):
         self.btn_preview.setToolTip("build the schedule (and fetch the ephemeris for a sky session) without touching the radio")
         self.btn_preview.clicked.connect(self._preview)
         brow.addWidget(self.btn_preview)
+        self.btn_ops = QtWidgets.QPushButton("Operations schedule")
+        self.btn_ops.clicked.connect(self._ops_schedule)
+        brow.addWidget(self.btn_ops)
         self.btn_start = QtWidgets.QPushButton("START")
         self.btn_start.setStyleSheet(f"background: {TEAL}; color: white; font-weight: bold; padding: 8px; font-size: 14px;")
         self.btn_start.clicked.connect(self._start)
@@ -1469,6 +1530,11 @@ class EveApp(QtWidgets.QMainWindow):
         self.btn_abort.clicked.connect(lambda: self.ctl.abort("operator abort from the Setup tab"))
         self.btn_abort.setEnabled(False)
         brow.addWidget(self.btn_abort)
+        self.btn_stop = QtWidgets.QPushButton("STOP after chunk")
+        self.btn_stop.setStyleSheet(STOP_STYLE + " QPushButton { padding: 8px; font-size: 14px; }")
+        self.btn_stop.clicked.connect(lambda: self.ctl.stop("operator stop from the Setup tab"))
+        self.btn_stop.setEnabled(False)
+        brow.addWidget(self.btn_stop)
         right.addLayout(brow)
         self.btn_save = QtWidgets.QPushButton("Save settings now")
         self.btn_save.setStyleSheet(HIGHLIGHT_STYLE)
@@ -1497,6 +1563,10 @@ class EveApp(QtWidgets.QMainWindow):
                                   "schedule, and run it. The Run tab shows the session; the Report tab opens when it ends.")
         self.btn_abort.setToolTip("Release the key line at once, stop the streams, close the archive, and write the "
                                   "session log. The same as the ABORT button on the Run tab.")
+        self.btn_stop.setToolTip("End the run cleanly: the chunk being transmitted finishes and its echo is received, "
+                                 "no further chunk is keyed, then the offline decode and the report run as after a "
+                                 "complete run. The same as STOP on the Run tab. ABORT is the immediate version.")
+        self.btn_ops.setToolTip(TIPS["ops_schedule"])
         self.btn_save.setToolTip(f"Settings are saved on every Start and on exit; this saves them now. File: {self.settings.path}")
         self.preview.setToolTip("The schedule that Start would run: one line per chunk with its frames, transmit and "
                                 "receive windows, round trip, elevation, and Doppler; then the total duration.")
@@ -1520,6 +1590,10 @@ class EveApp(QtWidgets.QMainWindow):
             except (TypeError, ValueError):
                 old = 2
             s.set("pilot_frames", EveParams.named(s.get("variant")).pilot_frames if s.get("full_symbol") else old)
+        # 1.0.17: the start is a choice (now + / at UTC / when the target rises) and a stop was
+        # added; an INI from before carries the 'start now' tick box
+        if not s.q.contains("sky_start_kind") and s.q.contains("sky_start_now"):
+            s.set("sky_start_kind", "now +" if s.q.value("sky_start_now") in (True, "true", "True", 1, "1") else "at UTC")
         mode = s.get("mode")
         for b in self.mode_group.buttons():
             b.setChecked(b.property("mode") == mode)
@@ -1805,8 +1879,10 @@ class EveApp(QtWidgets.QMainWindow):
         self.mode_stack.setCurrentIndex([k for k, _ in MODES].index(m))
         self.sky_box.setVisible(m in ("eme", "eve", "interop"))
         self.w["tx_gain"].setEnabled(True)
-        for key in ("sky_mode", "sky_source", "sky_precomp", "sky_rx_doppler"):
+        for key in ("sky_mode", "sky_source", "sky_precomp", "sky_rx_doppler", "sky_stop_kind", "sky_stop_utc", "sky_min_el_deg"):
             self.w[key].setEnabled(m in ("eme", "eve"))
+        self.btn_ops.setEnabled(m in ("eme", "eve") and not self.ctl.busy)
+        self._start_stop_changed()
         radio = m != "sim"
         for key in ("serial", "tx_gain", "rx_gain", "clock", "time_host", "gpsdo", "lo_offset_khz", "tx_port", "rx_port"):
             self.w[key].setEnabled(radio)
@@ -1902,6 +1978,25 @@ class EveApp(QtWidgets.QMainWindow):
         self.preview.setPlainText("building the schedule ...")
         if not self.ctl.start(self._values(), preview_only=True):
             self.preview.setPlainText("busy")
+
+    def _ops_schedule(self) -> None:
+        """'Operations schedule' button: the next two weeks of windows and passes for the Moon
+        or Venus from the preview worker (no radio); the table lands in the preview box."""
+        self._save()
+        self.preview.setPlainText("fetching the ephemeris for the next 14 days ...")
+        cfg = self._values()
+        cfg["ops_days"] = 14
+        if not self.ctl.start(cfg, preview_only=True):
+            self.preview.setPlainText("busy")
+
+    def _start_stop_changed(self) -> None:
+        """Start or stop kind changed: show only the fields that kind uses."""
+        if "sky_start_kind" not in self.w or "sky_stop_utc" not in self.w:
+            return
+        k = self.w["sky_start_kind"].currentText()
+        self.w["lead_s"].setVisible(k == "now +")
+        self.w["sky_start_utc"].setVisible(k == "at UTC")
+        self.w["sky_stop_utc"].setVisible(self.w["sky_stop_kind"].currentText() == "at UTC")
 
     def _notice(self, text: str) -> None:
         """Something the operator must know but that must not stop a timed run: a
@@ -2034,6 +2129,9 @@ class EveApp(QtWidgets.QMainWindow):
         self.btn_start.setEnabled(not running)
         self.btn_preview.setEnabled(not running)
         self.btn_abort.setEnabled(st in ("preparing", "running"))
+        self.btn_stop.setEnabled(st == "running" and self.mode() != "siggen")
+        self.btn_ops.setEnabled(not running and self.mode() in ("eme", "eve"))
+        self.panel.btn_stop.setVisible(self.mode() != "siggen")
         gen_on = st == "running" and self.mode() == "siggen"
         for b in (self.btn_gen_key, self.btn_gen_unkey, self.btn_gen_sweep, self.btn_gen_stop):
             b.setEnabled(gen_on)

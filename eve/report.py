@@ -45,12 +45,19 @@ def tx_events_text(counts: Dict) -> str:
     u = int(counts.get("underflow", 0))
     late = int(counts.get("late", 0))
     seq = int(counts.get("seq_error", 0))
-    if u + late + seq == 0:
+    rs = int(counts.get("resync", 0))
+    if u + late + seq + rs == 0:
         return ""
-    return (f"TRANSMITTER UNDERRAN: {u} underflows, {late} late packets, {seq} sequence errors. The host could not "
-            "deliver the transmit samples in time, so chunks went out late or empty and the receiver saw noise. "
-            "Variant A streams 1.5 MS/s, Variant B 786 kS/s: the Raspberry Pi 5 manages B, not A. On any PC close "
-            "other programs and use a direct USB 3 port.")
+    txt = (f"TRANSMITTER UNDERRAN: {u} underflows, {late} late packets, {seq} sequence errors. The host could not "
+           "deliver the transmit samples in time. ")
+    if rs:
+        txt += (f"The stream re-timed itself {rs} time{'s' if rs != 1 else ''} (skipping {counts.get('resync_skipped_s', 0.0):.1f} s "
+                "in all): the frames in those seconds were lost, the rest went out on time. ")
+    else:
+        txt += "Chunks went out late or empty and the receiver saw noise. "
+    txt += ("Variant A streams 1.5 MS/s, Variant B 786 kS/s: the Raspberry Pi 5 manages B, not A, and only while it stays "
+            "cool (it throttles near 80 C). On any PC close other programs (the remote desktop too) and use a direct USB 3 port.")
+    return txt
 
 
 def _mono(fig: Figure, x: float, y: float, lines: List[str], size: float = 8.0, dy: float = 0.0148) -> float:
@@ -88,6 +95,10 @@ def write_report(sched: Schedule, rep: Dict, summary: Optional[Dict], windows: L
     verdict = ("DECODED" if comb and comb["ok"] else ("NOT DECODED" if comb else "NO OFFLINE DECODE"))
     if rep.get("aborted"):
         verdict += "  (session aborted: " + str(rep.get("abort_reason", "")) + ")"
+    elif rep.get("stopped_early"):
+        # a clean stop (Session.stop, D26): the passes in hand were decoded; say how many chunks ran
+        verdict += (f"  (stopped early after {rep.get('chunks_keyed', 0)} of {len(sched.chunks)} chunks: "
+                    + str(rep.get("stop_reason", "")) + ")")
     vcolor = GREEN if comb and comb["ok"] and not rep.get("aborted") else RED
     t_sym = float(p.t_sym)
     t_msg = t_sym * p.n_sym

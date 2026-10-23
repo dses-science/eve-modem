@@ -78,6 +78,8 @@ class SimRadio:
         self.key_log: List[tuple] = []
         self._keyed = False
         self.sim = True
+        self.time_offset = 0.0              # tests: jump the device clock (a stalled host seen from the stream)
+        self.resync_test = False            # tests: let the tone source watch this clock and resync
 
     def open(self):
         """No hardware to open; returns self so callers can treat it like EveRadio.open()."""
@@ -89,7 +91,7 @@ class SimRadio:
 
     def device_time(self) -> float:
         """The wall clock (time.time(), Unix seconds) stands in for the USRP clock."""
-        return time.time()
+        return time.time() + self.time_offset
 
     def key(self, on: bool) -> None:
         """Record the TX key line as (host time, state) in key_log instead of driving a pin."""
@@ -159,8 +161,11 @@ class SessionReport:
     live_decode: Dict = field(default_factory=dict)
     aborted: bool = False
     abort_reason: str = ""
+    stopped_early: bool = False       # Session.stop(): ended cleanly before the last chunk
+    stop_reason: str = ""
     notes: List[str] = field(default_factory=list)
     tx_events: Dict = field(default_factory=dict)      # underflow / late / seq_error counts (EveRadio)
+    tx_resyncs: List[Dict] = field(default_factory=list)   # the stream re-timed itself after a stall (D26)
 
 
 class Session:
@@ -185,6 +190,8 @@ class Session:
         self.p = schedule.params
         self.report = SessionReport(schedule.session_id)
         self._abort = threading.Event()
+        self._stop = threading.Event()          # Session.stop(): finish the current chunk, key no more
+        self._t_end_eff: Optional[float] = None  # the run's end once a stop cut the chunk table short
         self.tb: Optional[gr.top_block] = None
         self.tone = None
         self.sink = None
@@ -243,20 +250,55 @@ class Session:
             except Exception:
                 pass
 
+    def stop(self, reason: str = "operator stop") -> None:
+        """End the run cleanly from any thread: the chunk being transmitted (if any) runs to
+        its end and its echo is received, no further chunk is keyed, the stream ends after
+        that echo, and the offline decode and the report follow as after a complete run.
+        The report records stopped_early and the reason. ABORT (abort()) is the immediate
+        version: key released at once, nothing more received."""
+        if not self._stop.is_set() and not self._abort.is_set():
+            self.report.stopped_early = True
+            self.report.stop_reason = reason
+            self.log(f"STOP requested ({reason}): the current chunk completes, no further chunk is keyed")
+            self._stop.set()
+
     # ---- keyer ---------------------------------------------------------------------------------
+    def _end_after(self, c) -> None:
+        """A stop took effect: `c` is the last chunk keyed (None if none was). Mute the tone
+        source from that chunk's end and end the stream after its echo (plus the end
+        margin); the run loop then ends there instead of at the schedule's end."""
+        n_total = len(self.sched.chunks)
+        if c is None:
+            now = self.radio.device_time()
+            t_mute, t_end = now, now + self.opts.end_margin_s
+            self.phase = "stopped before the first chunk"
+            self.log(f"stopped before any chunk was keyed ({n_total} planned)")
+        else:
+            t_mute, t_end = c.tx_stop, c.rx_stop + self.opts.end_margin_s
+            self.phase = f"stopping after chunk {c.index + 1} of {n_total}: echo due {iso_utc(c.rx_stop, 0)[11:19]}Z"
+            self.log(f"stopping after chunk {c.index + 1} of {n_total}: echo received until {iso_utc(c.rx_stop, 0)}, "
+                     f"{n_total - c.index - 1} chunks not sent")
+        if self.tone is not None:
+            self.tone.stop_after(t_mute, t_end)
+        self._t_end_eff = t_end
+
     def _keyer(self) -> None:
         """Keyer thread: for each chunk, key up at tx_start - T_lead - settle (the
         sequencer's LNA guard, so the RF still starts T_lead after the transmitter is
         keyed) and down at tx_stop + T_lag, on device time; log the key events and any
-        key-line fault. Receive-only sessions never key."""
+        key-line fault. Receive-only sessions never key. A stop() request is honored
+        between chunks: the chunk in progress completes, the next is not keyed."""
         if not self.opts.tx_enabled:
             self.phase = "receive only (partner transmits)"
             return
         settle = float(getattr(self.keyer, "settle_s", 0.0))     # the sequencer's LNA guard
+        prev = None
         for c in self.sched.chunks:
             t_on = c.tx_start - self.opts.t_lead_s - settle
             t_off = c.tx_stop + self.opts.t_lag_s
-            if not self._sleep_until(t_on):
+            if not self._sleep_until(t_on, wake_on_stop=True):
+                if not self._abort.is_set():
+                    self._end_after(prev)
                 return
             self.keyer.key(True)
             if self.keyer.fault:
@@ -278,6 +320,10 @@ class Session:
             self.report.key_events.append({"t": self.radio.device_time(), "on": False, "chunk": c.index})
             if not ok:
                 return
+            if self._stop.is_set():
+                self._end_after(c)
+                return
+            prev = c
 
     def _watchdog_release(self, chunk_index: int) -> None:
         """Timer callback: the keyer thread has not released chunk `chunk_index` in time.
@@ -290,10 +336,11 @@ class Session:
                 pass
             self.abort(f"keyer watchdog: chunk {chunk_index + 1} overran")
 
-    def _sleep_until(self, t_device: float) -> bool:
+    def _sleep_until(self, t_device: float, wake_on_stop: bool = False) -> bool:
         """Sleep on the radio's device clock until t_device (seconds); True when reached,
-        False on abort."""
-        while not self._abort.is_set():
+        False on abort (or, with wake_on_stop, on a stop() request: the wait before a
+        chunk's key-up, never the wait for its key-down)."""
+        while not self._abort.is_set() and not (wake_on_stop and self._stop.is_set()):
             now = self.radio.device_time()
             if now >= t_device:
                 return True
@@ -333,9 +380,22 @@ class Session:
         fD = self._doppler_fn()
         sim = getattr(self.radio, "sim", False)
         rate = self.radio.tx_rate
+        def on_resync(skipped_s: float, now: float) -> None:
+            # the transmit stream stalled (underflow) and re-timed itself: say so, with what was lost
+            lost = [c.index + 1 for c in s.chunks if c.tx_start < now + gr_blocks.RESYNC_LEAD_S and c.tx_stop > now - skipped_s]
+            self.report.tx_resyncs.append({"t": now, "skipped_s": round(float(skipped_s), 3), "chunks": lost})
+            self.log(f"TX RESYNC {len(self.report.tx_resyncs)}: the transmit stream was {skipped_s:.1f} s behind the device "
+                     f"clock (an underflow); skipped ahead and started a new timed burst at {iso_utc(now + gr_blocks.RESYNC_LEAD_S, 0)}"
+                     + (f"; chunk {', '.join(map(str, lost))} partly lost" if lost else "; between chunks, nothing lost"))
+
         self.tone = gr_blocks.EveToneSource(s, rate, t0, doppler_hz=fD if opts.tx_precompensate else None,
                                             include_if=True, t_end_device=max(c.rx_stop for c in s.chunks) + opts.end_margin_s,
-                                            tag_time=not sim)
+                                            tag_time=not sim, device_time=self.radio.device_time if not sim else None,
+                                            on_resync=on_resync)
+        if sim and getattr(self.radio, "resync_test", False):
+            # the software bench exercises the resync on the wall clock (tests only)
+            self.tone.tag_time = True
+            self.tone.device_time = self.radio.device_time
         windows = [(c.index, c.rx_start, c.rx_stop, c.frame_first) for c in s.chunks]
         f_shift = p.f_if
         self.decim = gr_blocks.make_rx_decimator(p, self.radio.rx_rate, f_shift)
@@ -403,6 +463,8 @@ class Session:
             raise ValueError(f"schedule starts in the past (device time {iso_utc(now, 0)}, start {iso_utc(s.t_start, 0)})")
         self.log(f"session {s.session_id}: {len(s.chunks)} chunks, first at {iso_utc(s.t_start, 0)}, "
                  f"flowgraph at {iso_utc(t0, 0)} (in {t0 - now:.1f} s)")
+        if t0 - now > 60.0:          # a timed start hours ahead (the operations schedule): say so on the badge
+            self.phase = f"waiting: first chunk at {iso_utc(s.t_start, 0)[11:19]}Z, streams armed {opts.arm_lead_s:.0f} s before"
         tb = self.build(t0)
         rt = None
         if opts.realtime_mode:
@@ -421,8 +483,11 @@ class Session:
             except Exception:
                 pass
             # start the flowgraph before t0 so the timed streams are armed (arm_lead_s)
-            self._sleep_until(t0 - opts.arm_lead_s)
+            self._sleep_until(t0 - opts.arm_lead_s, wake_on_stop=True)
             if self._abort.is_set():
+                return self._finish(rt, old_handler)
+            if self._stop.is_set():          # stopped while waiting for the start: nothing to send or receive
+                self.log("stopped before the streams were armed: nothing transmitted")
                 return self._finish(rt, old_handler)
             tb.start()
             self.phase = "armed"
@@ -433,7 +498,12 @@ class Session:
             while not self._abort.is_set():
                 # The simulation is paced by its throttle now, so it waits for the schedule's end
                 # like the hardware does; ending on tone.done alone cut the last chunks' keying
-                # short (the source runs a buffer's worth ahead of the wall clock).
+                # short (the source runs a buffer's worth ahead of the wall clock). A stop()
+                # moves the end to the last keyed chunk's echo (_end_after).
+                if self._stop.is_set() and not opts.tx_enabled and self._t_end_eff is None:
+                    self._end_after(None)                   # receive only: nothing of ours to wait for
+                if self._t_end_eff is not None:
+                    t_end = self._t_end_eff
                 if self.tone.done and self.radio.device_time() >= t_end:
                     break
                 time.sleep(0.2)
@@ -467,6 +537,9 @@ class Session:
             self.report.tone_samples_on = int(self.tone.samples_on)
             self.report.frames_sent = len(self.tone.frames_sent)
         ev = dict(getattr(self.radio, "tx_event_counts", lambda: {})() or {})
+        if self.tone is not None and getattr(self.tone, "resyncs", 0):      # the generator's source has none
+            ev["resync"] = int(self.tone.resyncs)
+            ev["resync_skipped_s"] = round(float(self.tone.resync_skipped_s), 1)
         if ev:
             self.report.tx_events = ev
             from .report import tx_events_text

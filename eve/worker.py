@@ -36,11 +36,13 @@ import numpy as np
 from .params import EveParams
 from . import doppler as D
 from . import schedule as S
+from . import ops
 from .doppler import iso_utc
 
 PREFIX = {"sim": "SIM", "bench": "BENCH", "interop": "INTEROP", "eme": "EME", "eve": "EVE"}
 TARGET = {"sim": "sim", "bench": "bench", "interop": "partner", "eme": "moon", "eve": "venus"}
-PREVIEW_MIN_EL_DEG = 10.0     # a preview with the target below the horizon shifts to when it reaches this
+PREVIEW_MIN_EL_DEG = 10.0     # a preview with the target below the horizon shifts to when it reaches this (the default minimum elevation)
+EPHEMERIS_SPAN_S = 16 * 3600.0   # the sky table reaches this far past the start: longer than any window at Haswell
 
 
 class Runner:
@@ -133,16 +135,39 @@ class Runner:
             if mode == "siggen":
                 return self._run_generator(cfg, p, radio, f_dial, archive, now, gps_text, preview_only)
 
-            # start time and ephemeris
+            # start time and ephemeris. Start: now + lead, a UTC time, or (sky modes) when the
+            # target rises above the minimum elevation (eve/ops.py, D26); an INI from before
+            # 1.0.17 carries sky_start_now instead of sky_start_kind.
             lead = float(cfg["lead_s"])
-            if mode in ("eme", "eve", "interop") and not cfg["sky_start_now"]:
+            sky = mode in ("eme", "eve")
+            start_kind = str(cfg.get("sky_start_kind") or ("now +" if cfg.get("sky_start_now", True) else "at UTC"))
+            min_el = float(cfg.get("sky_min_el_deg", PREVIEW_MIN_EL_DEG))
+            start_why = f"now + {lead:.0f} s"
+            if sky and cfg.get("ops_days") and preview_only:
+                return self._ops_table(cfg, p, f_dial, now, min_el)     # the day table needs no start
+            t_start: Optional[float]
+            if mode in ("eme", "eve", "interop") and start_kind == "at UTC":
                 t_start = D.to_unix(cfg["sky_start_utc"])
+                start_why = "the start time set on the Setup tab"
                 if t_start < now + 12.0:
                     raise RuntimeError(f"start {iso_utc(t_start, 0)} is in the past or too close; use 'start now' or a later time")
+            elif sky and start_kind.startswith("when"):
+                t_start = None                       # resolved on the ephemeris below
             else:
                 t_start = now + lead
+            if t_start is None:
+                target = TARGET[mode]
+                self.say(f"looking for the next time {target} is above {min_el:.0f} deg from {cfg['sky_source']} ...")
+                t_start = self._next_viable_start(target, site, now + lead, cfg["sky_source"], min_el)
+                if t_start is None:
+                    raise RuntimeError(f"{target} does not reach {min_el:.0f} deg within two days")
+                start_why = f"when {target} rises above {min_el:.0f} deg"
+                self.say(f"start when {target} is above {min_el:.0f} deg: {iso_utc(t_start, 0)} "
+                         f"(in {(t_start - now) / 60:.0f} min)")
             sid = f"{PREFIX[mode]}-{time.strftime('%Y%m%d-%H%M%S', time.gmtime(t_start))}"
             table_name = ""
+            t_stop: Optional[float] = None
+            stop_why = ""
             if mode == "sim":
                 model = D.DopplerModel(D.synthetic_table("sim", site, now - 60, now + 8 * 3600, range_km=float(cfg["sim_range_km"])))
             elif mode == "bench":
@@ -153,7 +178,9 @@ class Runner:
                 target = TARGET[mode]
                 table_path = archive / f"{sid}_{target}_haswell.csv"
                 self.say(f"ephemeris for {target} from {cfg['sky_source']} ...")
-                model = D.make_model(target, site, t_start - 1800, t_start + 8 * 3600, source=cfg["sky_source"],
+                # the table spans the longest window the target can have at Haswell (the Moon
+                # at high declination is up 15 h), so the elevation stop is always inside it
+                model = D.make_model(target, site, t_start - 7200, t_start + EPHEMERIS_SPAN_S, source=cfg["sky_source"],
                                      table_path=None if preview_only else table_path, step="1 m")
                 table_name = table_path.name if not preview_only else ""
                 el = model.elevation_deg(t_start)
@@ -161,24 +188,34 @@ class Runner:
                          f"Doppler {model.doppler_hz(t_start, f_dial):+.1f} Hz")
                 if el < 0 and preview_only:
                     # Rick, 2026-10-20: keep the warning, but show the NEXT viable schedule
-                    t_next = self._next_viable_start(target, site, t_start, cfg["sky_source"])
+                    t_next = self._next_viable_start(target, site, t_start, cfg["sky_source"], min_el)
                     if t_next is None:
                         raise RuntimeError(f"{target} is below the horizon at the start time (elevation {el:.1f} deg) "
-                                           f"and does not reach {PREVIEW_MIN_EL_DEG:.0f} deg within two days")
+                                           f"and does not reach {min_el:.0f} deg within two days")
                     msg = (f"{target} is below the horizon at the start time (elevation {el:.1f} deg). The preview "
                            f"shows the next viable schedule, from {iso_utc(t_next, 0)} when {target} reaches "
-                           f"{PREVIEW_MIN_EL_DEG:.0f} deg; set that start time (untick 'start now') before running.")
+                           f"{min_el:.0f} deg; set that start time, or choose 'when the target rises', before running.")
                     self.send(("notice", msg))
                     self.say("NOTE: " + msg)
                     t_start = t_next
+                    start_why = f"the next time {target} is above {min_el:.0f} deg"
                     sid = f"{PREFIX[mode]}-{time.strftime('%Y%m%d-%H%M%S', time.gmtime(t_start))}"
-                    model = D.make_model(target, site, t_start - 1800, t_start + 8 * 3600, source=cfg["sky_source"],
+                    model = D.make_model(target, site, t_start - 7200, t_start + EPHEMERIS_SPAN_S, source=cfg["sky_source"],
                                          table_path=None, step="1 m")
                     el = model.elevation_deg(t_start)
                     self.say(f"{target} at the shifted start: elevation {el:.1f} deg, RTT {model.rtt_s(t_start):.2f} s, "
                              f"Doppler {model.doppler_hz(t_start, f_dial):+.1f} Hz")
                 if el < 0:
                     raise RuntimeError(f"{target} is below the horizon at the start time (elevation {el:.1f} deg)")
+                # the stop: the operator's UTC stop and/or the end of the elevation window,
+                # whichever comes first (ops.resolve_stop); the planner lays no chunk past it
+                stop_utc = cfg.get("sky_stop_utc", "") if str(cfg.get("sky_stop_kind", "after the passes")) == "at UTC" else None
+                t_stop, stop_why = ops.resolve_stop(model, t_start, min_el, stop_utc, target)
+                if t_stop is not None and t_stop <= t_start + 60.0:
+                    raise RuntimeError(f"the stop ({stop_why}) at {iso_utc(t_stop, 0)} is not after the start "
+                                       f"{iso_utc(t_start, 0)}: {target} is at {el:.1f} deg and setting, or the stop time is too early")
+                if t_stop is not None:
+                    self.say(f"stop at {iso_utc(t_stop, 0)} ({stop_why})")
 
             # schedule
             common = dict(params=p, text=cfg["message"], repeat_count=int(cfg["repeat"]), pilot=cfg["pilot"])
@@ -206,17 +243,15 @@ class Runner:
                                          **common)
                 opts_kw = dict(pa_in_chain=False, tx_precompensate=False, rx_doppler_removal=False, tx_enabled=not rx_only)
             elif mode == "eme":
-                sched = S.build_schedule(sid, "moon", model, t_start, f_dial, mode=cfg["sky_mode"],
-                                         chunk_s=float(cfg["eme_chunk_s"]), rtt_guard_s=float(cfg["eme_rtt_guard"]),
-                                         t_on_max_s=float(cfg["eme_t_on_max"]), t_off_min_s=float(cfg["eme_t_off_min"]),
-                                         doppler_table=table_name, **common)
+                sched = self._sky_schedule(sid, "moon", model, t_start, t_stop, f_dial, cfg, chunk_s=float(cfg["eme_chunk_s"]),
+                                           rtt_guard_s=float(cfg["eme_rtt_guard"]), t_on_max_s=float(cfg["eme_t_on_max"]),
+                                           t_off_min_s=float(cfg["eme_t_off_min"]), doppler_table=table_name, **common)
                 opts_kw = dict(pa_in_chain=bool(cfg["eme_pa"]), tx_precompensate=bool(cfg["sky_precomp"]),
                                rx_doppler_removal=bool(cfg["sky_rx_doppler"]))
             else:
-                sched = S.build_schedule(sid, "venus", model, t_start, f_dial, mode=cfg["sky_mode"],
-                                         chunk_s=float(cfg["sky_chunk_s"]), rtt_guard_s=float(cfg["sky_rtt_guard"]),
-                                         t_on_max_s=float(cfg["sky_t_on_max"]), t_off_min_s=float(cfg["sky_t_off_min"]),
-                                         doppler_table=table_name, **common)
+                sched = self._sky_schedule(sid, "venus", model, t_start, t_stop, f_dial, cfg, chunk_s=float(cfg["sky_chunk_s"]),
+                                           rtt_guard_s=float(cfg["sky_rtt_guard"]), t_on_max_s=float(cfg["sky_t_on_max"]),
+                                           t_off_min_s=float(cfg["sky_t_off_min"]), doppler_table=table_name, **common)
                 opts_kw = dict(pa_in_chain=bool(cfg["sky_pa"]), tx_precompensate=bool(cfg["sky_precomp"]),
                                rx_doppler_removal=bool(cfg["sky_rx_doppler"]))
             if sched.pilot_enabled and sched.chunks:
@@ -230,6 +265,8 @@ class Runner:
             dur = sched.t_end - sched.t_start
             desc += (f"\nduration {dur / 60:.1f} min ({int(dur // 3600)}h {int(dur % 3600 // 60):02d}m); symbol {p.n_frames} frames = "
                      f"{p.t_sym:.1f} s; message {p.t_sym * p.n_sym / 60:.1f} min per pass")
+            if sky:
+                desc = ops.day_plan_text(TARGET[mode], "Haswell", model, t_start, start_why, t_stop, stop_why, min_el, sched) + "\n\n" + desc
             if preview_only:
                 self.send(("preview", desc))
                 return {"ok": True, "pdf": None, "preview": True}
@@ -318,18 +355,50 @@ class Runner:
             self.session = None
             self.send(("state", "idle"))
 
-    def _next_viable_start(self, target: str, site, t_from: float, source: str) -> Optional[float]:
-        """The first time after t_from when the target is at or above PREVIEW_MIN_EL_DEG, found on a
-        coarse two-day ephemeris (10 min steps, then refined to the minute); None if it never is."""
+    def _next_viable_start(self, target: str, site, t_from: float, source: str,
+                           min_el: float = PREVIEW_MIN_EL_DEG) -> Optional[float]:
+        """The first whole minute at or after t_from when the target is at or above min_el,
+        found on a coarse two-day ephemeris (10 min steps, crossings refined by ops.windows);
+        None if it never is."""
         coarse = D.make_model(target, site, t_from, t_from + 2 * 86400.0, source=source, table_path=None, step="10 m")
-        t = float(t_from)
-        while t < t_from + 2 * 86400.0:
-            if coarse.elevation_deg(t) >= PREVIEW_MIN_EL_DEG:
-                while t - 60.0 > t_from and coarse.elevation_deg(t - 60.0) >= PREVIEW_MIN_EL_DEG:
-                    t -= 60.0
-                return 60.0 * math.ceil(t / 60.0)       # a whole minute
-            t += 600.0
-        return None
+        return ops.rise_time(coarse, float(t_from), min_el)
+
+    def _sky_schedule(self, sid: str, target: str, model, t_start: float, t_stop: Optional[float], f_dial: float,
+                      cfg: Dict, **kw):
+        """build_schedule for the Moon or Venus with the stop time, turning the planner's
+        'no chunk fits' into advice the operator can act on."""
+        try:
+            return S.build_schedule(sid, target, model, t_start, f_dial, mode=cfg["sky_mode"], t_stop=t_stop, **kw)
+        except ValueError as e:
+            if t_stop is not None and "no chunk fits" in str(e):
+                raise RuntimeError(f"no chunk fits between the start {iso_utc(t_start, 0)} and the stop {iso_utc(t_stop, 0)}: "
+                                   f"a chunk and its echo take about {float(kw.get('chunk_s') or 240) + model.rtt_s(t_start):.0f} s; "
+                                   f"start earlier, stop later, or lower the minimum elevation") from e
+            raise
+
+    def _ops_table(self, cfg: Dict, p, f_dial: float, now: float, min_el: float) -> Dict:
+        """The 'Operations schedule' preview: one line per day for cfg['ops_days'] days from
+        now, from one coarse ephemeris (5-minute step), with the passes the current chunking
+        fits into each day's window (eve/ops.py). Sent as the preview text."""
+        mode = cfg["mode"]
+        target = TARGET.get(mode, "venus")
+        days = max(1, min(31, int(cfg.get("ops_days", 14))))
+        site = D.DSES_HASWELL
+        self.say(f"ephemeris for {target}, {days} days from {cfg['sky_source']} ...")
+        model = D.make_model(target, site, now - 1800, now + days * 86400.0, source=cfg["sky_source"], table_path=None, step="5 m")
+        if mode == "eme":
+            kw = dict(chunk_s=float(cfg["eme_chunk_s"]), rtt_guard_s=float(cfg["eme_rtt_guard"]),
+                      t_on_max_s=float(cfg["eme_t_on_max"]), t_off_min_s=float(cfg["eme_t_off_min"]))
+        else:
+            kw = dict(chunk_s=float(cfg["sky_chunk_s"]), rtt_guard_s=float(cfg["sky_rtt_guard"]),
+                      t_on_max_s=float(cfg["sky_t_on_max"]), t_off_min_s=float(cfg["sky_t_off_min"]))
+        rows = ops.ops_table(target, model, now, min_el, p, text=cfg["message"], repeat_count=int(cfg["repeat"]),
+                             mode=cfg.get("sky_mode", "monostatic"), f_dial_hz=f_dial, **kw)
+        txt = (f"OPERATIONS SCHEDULE  {target} at Haswell, {days} days from {iso_utc(now, 0)[:16]}Z; Variant {p.variant}, "
+               f"{p.n_frames} frames per symbol, chunks of {kw['chunk_s']:.0f} s\n"
+               + ops.format_ops_table(rows, target, min_el, int(cfg["repeat"])))
+        self.send(("preview", txt))
+        return {"ok": True, "pdf": None, "preview": True}
 
     def _run_generator(self, cfg: Dict, p, radio, f_dial: float, archive: Path, now: float, gps_text: str,
                        preview_only: bool) -> Dict:
@@ -435,10 +504,14 @@ class Runner:
         tx_warned = False
         n = 0
         while not stop.is_set():
-            if self.poll_commands is not None and hasattr(sess, "set_level"):
+            if self.poll_commands is not None:
                 for cmd in self.poll_commands():
                     try:
-                        if cmd[0] == "level":
+                        if cmd[0] == "stop" and not hasattr(sess, "set_level"):
+                            sess.stop(str(cmd[1]) if len(cmd) > 1 else "operator stop")    # Session: after this chunk
+                        elif not hasattr(sess, "set_level"):
+                            continue                                                        # generator commands only
+                        elif cmd[0] == "level":
                             sess.set_level(tx_gain_db=cmd[1], scale_db=cmd[2])
                         elif cmd[0] == "key":
                             threading.Thread(target=sess.key, args=(bool(cmd[1]),), kwargs={"why": "operator"}, daemon=True).start()
@@ -469,7 +542,11 @@ class Runner:
                 d["radio"] = f"radio status unavailable: {e}"
             # transmit underflows / late packets: the radio line carries the warning, the
             # operator gets one notice box, the log one line (2026-10-20, Raspberry Pi 5)
-            ev = getattr(radio, "tx_event_counts", lambda: {})()
+            ev = dict(getattr(radio, "tx_event_counts", lambda: {})() or {})
+            tone = getattr(sess, "tone", None)
+            if tone is not None and getattr(tone, "resyncs", 0):
+                ev["resync"] = int(tone.resyncs)
+                ev["resync_skipped_s"] = round(float(tone.resync_skipped_s), 1)
             if ev:
                 d["tx_events"] = ev
                 warn = tx_events_text(ev)

@@ -4,8 +4,8 @@
 | | |
 |---|---|
 | Document | DSES EVE Modem Operator's Guide |
-| Revision | Rev C — DRAFT (program 1.0.16) |
-| Date | 2026-10-20 |
+| Revision | Rev C — DRAFT (program 1.0.17) |
+| Date | 2026-10-23 |
 | Prepared by | Rick Hambly, K0GD, Deep Space Exploration Society |
 | Funding | Supported by a grant from Amateur Radio Digital Communications. |
 | Companion | DSES EVE Modem Design Description and ICD (Rev C): the why behind every setting |
@@ -195,12 +195,27 @@ interop drops the pilot) and says so in the teal line under the run modes.
 ## 4.4 Mode settings
 
 The group under the radio settings changes with the mode. For EME and Venus the sky
-session group adds the start time (now plus a lead, or a UTC time), the ephemeris source
+session group adds the start, the stop, the minimum elevation, the ephemeris source
 (Horizons, astropy fallback), the station mode (monostatic, or transmit-only for a
 partner receiver), and the Doppler handling. The defaults are the design values; change
 them only for a reason you can write in the log.
 
-## 4.5 Preview, Start, Abort
+**Start** is one of three: *now +* the lead time after START; *at UTC* the time beside it
+(a planned session window; a time in the past is refused); or *when the target rises*,
+the first minute the Moon or Venus is above the minimum elevation. With the last one you
+can press START hours ahead: the program opens the radio, fetches the ephemeris, builds
+the schedule and waits, with the badge saying when the first chunk is due. That is the
+Venus default.
+
+**Stop** bounds the run. *After the passes* ends it when the repeat count has been sent;
+*at UTC* ends it no later than the time beside it. Either way the run also ends when the
+target drops below the **minimum elevation** (10 degrees, the operating schedule's floor:
+below it the ground fills the beam and a pass adds little). The schedule plans no chunk
+whose echo would arrive after the stop, so the preview shows exactly what will be sent,
+and the report says how many passes were complete. A run that is going well can be ended
+early with STOP (section 4.5).
+
+## 4.5 Preview, Operations schedule, Start, Stop, Abort
 
 **Preview schedule** builds the schedule without touching the radio and lists every
 chunk with its times, frames, round trip, elevation, and Doppler, then the total
@@ -208,10 +223,26 @@ duration. For a sky session this fetches the ephemeris, which takes a few second
 the elevation and the duration before Start. If the Moon or Venus is below the horizon at
 the start time, the preview warns and shows the next viable schedule instead, from the
 minute the target reaches 10 degrees; set that start time (untick *start now*) before
-Start, which still refuses a target below the horizon.
+Start, which still refuses a target below the horizon. For a sky session the preview
+begins with an OPERATIONS block: the day's window above the minimum elevation, the
+highest elevation, the start and the stop with their reasons, and how many of the passes
+fit before the stop.
+
+**Operations schedule** (EME and Venus) shows the next two weeks in the preview box from
+one ephemeris: for each day the window above the minimum elevation in UTC and Mountain
+time, the highest elevation, how many of the repeat count's passes fit with the current
+chunking, the last echo, the range and its loss against the best day, and the Doppler at
+rise. Nothing is run. The same table comes from `tools/eve_ops_schedule.py` for the field
+log and for planning emails.
 
 **START** saves the settings, programs the GPS clock, opens the radio, builds the
-schedule, and switches to the Run tab. The first chunk starts after the lead time (15 s).
+schedule, and switches to the Run tab. The first chunk starts after the lead time, at the
+UTC time, or when the target rises, as the Start setting says.
+
+**STOP after chunk** ends a run cleanly: the chunk being transmitted finishes and its echo
+is received, no further chunk is keyed, and the offline decode and the report follow as
+after a complete run, with the passes in hand. Use it when the window is closing or the
+passes received are enough. The same button is on the Run tab.
 
 **ABORT** releases the key line at once, stops the streams, closes the archive, and
 writes the log. Use it for any fault. The same button is on the Run tab.
@@ -271,12 +302,13 @@ the antenna connected, and keep **PA** ticked whenever the amplifier is in the c
 <!-- widths: 1.6,5.1 -->
 | Panel | What a healthy run looks like |
 |---|---|
-| Phase badge (top right) | Colored by state. Amber while the program is busy before the session (opening the radio, GPS clock, ephemeris, schedule) and after it (draining and closing the archive, closing the radio, offline decode window n of N, writing the report). Teal during the session: armed → TX chunk n of N → listening for chunk n → … Green DECODED or red NOT DECODED / ABORTED / FAILED at the end, and it stays there while the Report tab shows the result. If the badge is amber, the program is working; give the decode a few seconds per window. |
+| Phase badge (top right) | Colored by state. Amber while the program is busy before the session (opening the radio, GPS clock, ephemeris, schedule) and after it (draining and closing the archive, closing the radio, offline decode window n of N, writing the report). Teal during the session: waiting (a timed start, with the first chunk's time) → armed → TX chunk n of N → listening for chunk n → … → stopping after chunk n (after STOP). Green DECODED or red NOT DECODED / ABORTED / FAILED at the end, and it stays there while the Report tab shows the result. If the badge is amber, the program is working; give the decode a few seconds per window. |
+| STOP and ABORT | STOP after this chunk (amber) lets the chunk in progress finish and its echo arrive, keys no more, and goes on to the decode and the report. ABORT (red) releases the key at once and stops everything; use it for a fault. |
 | Clocks | UTC (PC) and device time agree to milliseconds when the time was set on a PPS. |
 | Tone strip | One bright dot per row (one tone per frame) that steps to a new column at each symbol boundary; a steady column during the pilot. The background is receiver noise. A blank strip means no signal, wrong RX gain, or the receive window is closed (between chunks). At Venus strength single frames show nothing: that is expected. |
 | Current symbol | The sum over the frames of the symbol in progress. The yellow dashed line is the tone we sent; the solid red line with a dot on its peak is the leader. On the bench they coincide from the first frame; on Venus the peak climbs out of the noise as frames add up. |
 | Running decisions | One row per symbol: expected, decided, margin in dB, frames summed. Green rows agree with what we sent. The line under the table shows the message the live accumulators would decode now. |
-| Schedule | Chunk in progress, chunks complete, time remaining, frames wanted vs received. |
+| Schedule | The countdown first: what the station is doing now and how long it lasts, big and colored (red TRANSMITTING with the seconds left in the chunk; teal LISTENING / RECEIVING ECHO until the echo window closes; slate NEXT TX or WAITING FOR START until the next key-down, in hours:minutes:seconds for a timed start; amber STOPPING after STOP). Under it the chunk in progress, chunks complete, session start and end, time remaining, frames wanted vs received. |
 | Key lamp | Red while the transmitter is keyed; the line beside it reads TX and LNA state and names the outputs in use (the USB relay board, the B210 GPIO lines, or both), with any fault (a board that stopped answering). The transmitter is keyed 200 ms before the RF and released 100 ms after; the LNA switches off a guard time before that and back on a release time after. |
 | Radio and ephemeris | LOCKED must be shown on the air. LO offset ok in both directions. GPS clock: sat LOCK, PLL LOCK. Target azimuth, elevation, round trip, Doppler, and rate. |
 | Log | Every step the program took, keying events, radio messages, decode results. |
@@ -316,8 +348,12 @@ synchronization (pilot offset, tracker residual, sample gaps), and the key-event
    the dish on the Moon: the echo path,
    the Doppler pre-compensation, the sequencer, the LNA, and the gains. Expect the echo
    in the receive windows 2.5 s after each chunk.
-5. **Venus**: full length, seven passes, start time from the operating schedule (Venus
-   reaches 10 degrees at Haswell about 14:20 UTC on 24 October).
+5. **Venus**: press *Set defaults* in EVE mode (full length, seven passes, start *when
+   the target rises*, minimum elevation 10 degrees), check the day with *Operations
+   schedule* and *Preview schedule*, and press START any time before Venus reaches 10
+   degrees (about 14:20 UTC on 24 October): the program waits with the radio open, sends
+   the passes, and stops by itself when they are done or when Venus drops below 10
+   degrees (about 22:27 UTC). STOP after chunk ends the day early with the passes in hand.
 
 After every run, read the report before deciding the next step. Keep the archive folder;
 the raw windows can be decoded again later.
@@ -351,13 +387,15 @@ about −20 dBm at RX2, so 30 to 40 dB of attenuation between two radios on the 
 | "USRP time did not take on the PPS edge" | No PPS at PPS IN. Check OUT2 to PPS IN (output 2 must be disabled: the program does that). As a fallback tick host-timed. |
 | "PPS verify False" in the log | Same as above: no second PPS edge was seen. |
 | A storm of 'L' or LATE_COMMAND in the log at the start | The radio was not armed in time. Increase the lead time (15 s or more) and close other programs. |
-| "TRANSMITTER UNDERRAN" in red on the Run tab's radio line, in a notice box and in the report; symbol 0 right and the rest wrong with margins near 0 dB; a 'U' then a storm of 'L' in app.log | The host could not generate the transmit samples in time, so the chunks went out late or empty and the receiver heard noise. Variant A streams 1.5 MS/s, beyond the Raspberry Pi 5: use Variant B (786 kS/s, the default). On any PC close other programs and use a direct USB 3 port. The counts (underflows, late packets) are in the session JSON under `tx_events`. |
+| "TRANSMITTER UNDERRAN" in red on the Run tab's radio line, in a notice box and in the report; a 'U' then a burst of 'L' in app.log | The host could not generate the transmit samples in time (an underflow). From 1.0.17 the stream re-times itself: the log says "TX RESYNC n: the transmit stream was x s behind ... skipped ahead", the frames in those seconds are lost (the chunk in progress is named), and the rest of the run goes out on time; the warning counts the resyncs. Before 1.0.17 every packet after the underflow was late and dropped and nothing reached the air for the rest of the run (Haswell, 20 and 23 October). Causes: Variant A's 1.5 MS/s on the Raspberry Pi 5 (use Variant B, the default), the Pi running hot (it throttles its clock near 80 C: give it air, read `vcgencmd get_throttled`, 0x0 is clean), a remote-desktop streamer or other programs on the CPU, a USB hub instead of a direct USB 3 port. Repeated resyncs mean the host cannot keep up at all: stop and fix the cause. The counts (underflows, late packets, resyncs) are in the session JSON under `tx_events`. |
 | 'O' or overflows in the log | The PC dropped receive samples. One short overflow at start-up is known and padded; repeated ones mean the PC is too busy: close other programs, use a direct USB 3 port. The archive records every gap. |
 | Blank tone strip during a receive window | No signal or wrong RX gain. On the bench check TX gain 0 and nothing on the antenna ports; on the air check the LNA and the sequencer. |
 | Decisions wrong on the bench | Reference unlocked (frequency off), or the LO offset fell back (the radio line says so). Do not go on the air until the bench decodes. |
 | "a chunk of N frames cannot hold the pilot frames plus data" | The chunk is too short for the pilot. Bench and interop chunks are raised by the program; on the Moon the 2.4 s chunk holds six Variant A frames (three of Variant B), so the pilot is capped at four (one), and a chunk shortened afterwards may need the pilot set again. Variant B on the bench: use a chunk of 4 s or more (the message says the minimum). |
 | "the run worker stopped without a result" | The run process ended without reporting. Read the last lines of `app.log` before it (section 3 names the log folder). Before 1.0.10 a full-length sky schedule could trip a timestamp rounding fault in the program itself (one timestamp in a thousand written a second early; fixed), and the message appeared while the worker was in fact still running. |
 | "chunk would hold no frames" | The chunk settings leave no room between the round trip and the guard. Restore the mode's defaults. |
+| "the stop ... is not after the start" or "no chunk fits between the start ... and the stop" | The stop (the UTC stop, or the target setting below the minimum elevation) comes before a chunk and its echo could complete. Start earlier, stop later, or lower the minimum elevation; the preview's OPERATIONS block shows the day's window. |
+| "does not reach 10 deg within two days" | Start *when the target rises* was chosen but the target stays below the minimum elevation for two days from now. Check the target (Moon or Venus) and the minimum elevation, or set a UTC start. |
 | Horizons unreachable | The ephemeris source falls back to astropy with the local DE440s. The Doppler differs by up to 10 Hz at 13 cm; acceptable, but note it in the log. |
 | "the run worker died while opening the radio ... retrying" | Every run lives in its own worker process, and opening the B210 faults about one time in seven on Windows (a UHD fault, not the radio). The program retries the open up to three times by itself; the log shows each try. If all three fail, power-cycle the B210 (USB and DC off for 15 s) and Start again. The window never closes because of it. |
 | The program closes by itself | A native library crashed. Two files in the log folder (section 3) tell the story: `app.log` (everything the program printed) and `fault.log` (the traceback of a hard crash). Send both. If the B210 was left streaming by a program that was killed, power-cycle it (USB and DC off for 15 s) before the next try. |
@@ -439,5 +477,6 @@ FPGA images (`uhd_images_downloader` in radioconda) the first time it is opened.
 
 The window drives the same code as the tools in `tools/`: `eve_session.py plan | run |
 sim`, `eve_bench.py`, `eve_decode.py`, `eve_txcw.py` (one comb tone into the lab counter),
+`eve_ops_schedule.py` (the operating schedule table for any span of days),
 and `python -m eve.gpsdo status | config | preflight` for the GPS clock. Use them for
 scripted tests and for the field log; the design document section 5.1 lists their options.

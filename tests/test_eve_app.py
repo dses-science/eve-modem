@@ -163,6 +163,15 @@ def test_eme_defaults_fit_the_moon_chunk(tmp_path):
     assert cfg["variant"] == "B" and cfg["full_symbol"] is True and cfg["pilot"] and cfg["pilot_frames"] == 40
     assert cfg["repeat"] == 7                                        # the 2026-10-20 operating schedule
     assert cfg["tx_gain"] == 55.0 and cfg["keyer_kind"] == "sequencer"
+    # the Venus operations schedule (D26): start when Venus rises above 10 deg, stop after the
+    # passes (and at 10 deg); the fields the start kind does not use are hidden
+    assert cfg["sky_start_kind"] == "when the target rises" and cfg["sky_stop_kind"] == "after the passes"
+    assert cfg["sky_min_el_deg"] == 10.0
+    assert win.w["lead_s"].isHidden() and win.w["sky_start_utc"].isHidden() and win.w["sky_stop_utc"].isHidden()
+    win.w["sky_start_kind"].setCurrentText("at UTC")
+    assert not win.w["sky_start_utc"].isHidden()
+    win.w["sky_stop_kind"].setCurrentText("at UTC")
+    assert not win.w["sky_stop_utc"].isHidden()
     select("siggen")
     win._set_defaults()
     assert win._values()["keyer_kind"] == "sequencer"
@@ -184,6 +193,17 @@ def test_eme_defaults_fit_the_moon_chunk(tmp_path):
     win.settings.sync()
     win._load()
     assert win.w["pilot_frames"].value() == 3
+    # an INI from before 1.0.17 (the 'start now' tick box) maps to the start kind
+    win.settings.q.remove("sky_start_kind")
+    win.settings.q.setValue("sky_start_now", False)
+    win.settings.sync()
+    win._load()
+    assert win.w["sky_start_kind"].currentText() == "at UTC"
+    win.settings.q.remove("sky_start_kind")
+    win.settings.q.setValue("sky_start_now", True)
+    win.settings.sync()
+    win._load()
+    assert win.w["sky_start_kind"].currentText() == "now +"
     win.close()
 
 
