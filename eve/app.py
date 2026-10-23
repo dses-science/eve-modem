@@ -2034,6 +2034,18 @@ class EveApp(QtWidgets.QMainWindow):
         if cfg["mode"] in ("eme", "eve", "interop") and cfg["full_symbol"] is False:
             if not self._confirm_test_length(cfg):
                 return
+        if cfg["mode"] in ("eme", "eve") and cfg.get("keyer_kind", "none") == "none":
+            # Haswell, 2026-10-23: the day's Venus runs went out with Switching at 'none', so the
+            # PA and the LNA were never keyed; the teal advisory line alone was missed
+            r = QtWidgets.QMessageBox.question(
+                self, "No switching selected",
+                "Switching is 'none': the PA and the LNA will NOT be keyed, so the station stays in receive while the "
+                "B210 transmits into it (right only for the bare-B210 EME test). For a station run set Switching to "
+                "'TX key + LNA (USB relay board + B210 GPIO)' in the Keying group of the Setup tab and press Test TX "
+                "and Test LNA first.\n\nStart anyway, without keying?",
+                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No, QtWidgets.QMessageBox.No)
+            if r != QtWidgets.QMessageBox.Yes:
+                return
         self.report.set_archive(cfg["archive"])
         self.preview.setPlainText("")
         if self.ctl.start(cfg):
