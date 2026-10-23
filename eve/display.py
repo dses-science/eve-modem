@@ -130,7 +130,7 @@ class OperatorPanel(QtWidgets.QWidget):
 
         # header: session + phase + clocks
         self.lbl_title = QtWidgets.QLabel()
-        self.lbl_title.setStyleSheet(f"font-size: 15px; font-weight: bold; color: {NAVY};")
+        self.lbl_title.setStyleSheet(f"QLabel {{ font-size: 15px; font-weight: bold; color: {NAVY}; }}")
         self.lbl_phase = QtWidgets.QLabel("idle")
         self._phase_kind = None
         self.set_phase("idle", "idle")
@@ -210,6 +210,7 @@ class OperatorPanel(QtWidgets.QWidget):
         # the countdown: what the station is doing now and how long it lasts (Rick, 2026-10-23)
         self.lbl_count = QtWidgets.QLabel("")
         self.lbl_count.setAlignment(QtCore.Qt.AlignCenter)
+        self.lbl_count.setWordWrap(True)          # a wrapped label sets no minimum width (1.0.18)
         self._countdown("", "", "idle")
         sv.addWidget(self.lbl_count)
         self.lbl_sched = QtWidgets.QLabel()
@@ -218,6 +219,7 @@ class OperatorPanel(QtWidgets.QWidget):
         sv.addWidget(self.lbl_sched)
         self.key_lamp = QtWidgets.QLabel("KEY")
         self.key_lamp.setAlignment(QtCore.Qt.AlignCenter)
+        self.key_lamp.setWordWrap(True)
         self._lamp(False)
         sv.addWidget(self.key_lamp)
         rv_all.addWidget(sch_box, 1)
@@ -232,7 +234,7 @@ class OperatorPanel(QtWidgets.QWidget):
         self.lbl_eph.setStyleSheet(mono() + " font-size: 11px;")
         self.lbl_eph.setWordWrap(True)
         rv.addWidget(self.lbl_eph)
-        self.btn_stop = QtWidgets.QPushButton("STOP after this chunk — finish its echo, then decode")
+        self.btn_stop = QtWidgets.QPushButton("STOP after this chunk")
         self.btn_stop.setStyleSheet(STOP_STYLE)
         self.btn_stop.setEnabled(False)
         self.btn_stop.clicked.connect(self._stop_clicked)
@@ -333,15 +335,15 @@ class OperatorPanel(QtWidgets.QWidget):
         """Paint the countdown label: `what` (TRANSMITTING, LISTENING, ...) and the time left,
         colored by kind (tx red, rx teal, wait slate, stop amber, idle grey)."""
         self.lbl_count.setStyleSheet(
-            "font-size: 26px; font-weight: bold; padding: 8px; border-radius: 4px; color: white; background: "
-            + self.COUNT_COLORS.get(kind, "#7f8c8d") + ";")
+            "QLabel { font-size: 22px; font-weight: bold; padding: 6px; border-radius: 4px; color: white; background: "
+            + self.COUNT_COLORS.get(kind, "#7f8c8d") + "; }")
         self.lbl_count.setText(f"{what}   {left}".strip() if left else (what or "—"))
 
     def _lamp(self, on: bool):
         """Paint the key lamp red 'KEY DOWN' or grey 'key up'."""
         self.key_lamp.setStyleSheet(
-            "font-size: 16px; font-weight: bold; padding: 6px; border-radius: 4px; color: white; background: "
-            + ("#c0392b" if on else "#7f8c8d") + ";")
+            "QLabel { font-size: 16px; font-weight: bold; padding: 6px; border-radius: 4px; color: white; background: "
+            + ("#c0392b" if on else "#7f8c8d") + "; }")
         self.key_lamp.setText("KEY DOWN — TRANSMITTING" if on else "key up")
 
     PHASE_COLORS = {"idle": "#7f8c8d", "busy": "#B86A18", "run": TEAL, "ok": "#1e7d3a", "fail": "#c0392b"}
@@ -352,8 +354,8 @@ class OperatorPanel(QtWidgets.QWidget):
         or red for the verdict, grey when idle."""
         if kind != self._phase_kind:
             self._phase_kind = kind
-            self.lbl_phase.setStyleSheet(f"font-size: 15px; font-weight: bold; color: white; background: "
-                                         f"{self.PHASE_COLORS.get(kind, TEAL)}; padding: 3px 8px; border-radius: 3px;")
+            self.lbl_phase.setStyleSheet(f"QLabel {{ font-size: 15px; font-weight: bold; color: white; background: "
+                                         f"{self.PHASE_COLORS.get(kind, TEAL)}; padding: 3px 8px; border-radius: 3px; }}")
         if self.lbl_phase.text() != text:
             self.lbl_phase.setText(text)
 

@@ -77,14 +77,18 @@ class ScheduleFrameMap(FrameMap):
         tones = np.full(k.shape, OFF, dtype=np.int64)
         on = k != OFF
         if on.any():
-            lut = {int(u): self.tone(int(u)) for u in np.unique(k[on])}
-            tones[on] = np.array([lut[int(u)] for u in k[on]], dtype=np.int64)
+            # one FrameMap.tone() call per distinct frame (one or two per block), then a
+            # vectorized gather: the per-sample Python list this used to build cost the
+            # Raspberry Pi a third of a core at 786 kS/s (2026-10-23)
+            uniq, inv = np.unique(k[on], return_inverse=True)
+            lut = np.array([self.tone(int(u)) for u in uniq], dtype=np.int64)
+            tones[on] = lut[inv]
         return tones
 
 
 RESYNC_LATE_S = 0.25      # samples this far behind device time = the transmit stream has stalled
-RESYNC_LEAD_S = 1.0       # the new burst starts this far ahead of device time
-RESYNC_CHECK_BLOCKS = 4   # how often the device clock is read (every 4th block, about 3 times a second)
+RESYNC_LEAD_S = 4.0       # the new burst starts this far ahead of device time: the host gets that much
+                          # cushion back (1 s was too little on the Raspberry Pi, 2026-10-23 15:36Z run)
 
 
 class EveToneSource(gr.sync_block):
@@ -95,11 +99,12 @@ class EveToneSource(gr.sync_block):
     the host falls behind (an underflow: a CPU stall, a throttled Raspberry Pi), every
     packet after it carries a time already past, the radio drops each one as LATE, and
     nothing we send reaches the air again for the rest of the run (Haswell, 2026-10-20
-    and 2026-10-23). With `device_time` given, work() compares the device clock with the
-    time of the sample it is about to generate every RESYNC_CHECK_BLOCKS blocks; when the
-    stream is RESYNC_LATE_S behind, it ends the burst (tx_eob on a short block, dropped
-    like the rest), skips the backlog, and begins a new burst RESYNC_LEAD_S ahead of the
-    clock (tx_sob + tx_time on its first sample). The schedule's frames in the skipped
+    and 2026-10-23). The session's run loop calls watch(device_now) a few times a second
+    (never the stream thread itself: a USB clock read inside work() cost the Raspberry Pi
+    its margin); when the sample about to be generated is RESYNC_LATE_S behind the clock,
+    work() ends the burst (tx_eob on a short block, dropped like the rest), skips the
+    backlog, and begins a new burst RESYNC_LEAD_S ahead of the clock (tx_sob + tx_time on
+    its first sample), which also rebuilds the host's cushion. The frames in the skipped
     seconds are lost; the rest of the run goes out on time. `resyncs` and
     `resync_skipped_s` count it; `on_resync(skipped_s, device_now)` is called each time."""
 
@@ -107,7 +112,6 @@ class EveToneSource(gr.sync_block):
                  doppler_hz: Optional[Callable[[np.ndarray], np.ndarray]] = None,
                  amplitude: Optional[float] = None, include_if: bool = True,
                  t_end_device: Optional[float] = None, block_len: int = 65536, tag_time: bool = True,
-                 device_time: Optional[Callable[[], float]] = None,
                  on_resync: Optional[Callable[[float, float], None]] = None):
         gr.sync_block.__init__(self, name="eve_tone_source", in_sig=None, out_sig=[np.complex64])
         self.sched = schedule
@@ -126,24 +130,31 @@ class EveToneSource(gr.sync_block):
         self.tag_time = tag_time
         self._block_len = block_len
         self._mute_from: Optional[float] = None
-        self.device_time = device_time
         self.on_resync = on_resync
         self.resyncs = 0
         self.resync_skipped_s = 0.0
         self._burst_start = True        # the next block's first sample gets the tx_time tag
+        self._resync_wanted = False     # watch() saw the stream behind: work() ends the burst
         self._resync_pending = False    # the burst was ended: the next block starts a new one
-        self._blocks = 0
+        self._now: Optional[float] = None   # the device clock as last seen by watch()
         self.set_min_output_buffer(1 << 22)     # deep TX edge (self-test lesson 2026-08-05)
 
-    def _lag_s(self) -> float:
-        """How far the sample about to be generated lies BEHIND the device clock (seconds;
-        negative = the normal state, the stream runs ahead by the buffer depth)."""
-        return float(self.device_time()) - (self.t0 + self.n_out / self.fs)
+    def watch(self, device_now: float) -> float:
+        """Called from the session's run loop with the device clock: how far the sample
+        about to be generated lies BEHIND it (seconds; negative = the normal state, the
+        stream runs ahead by the buffer depth). Past RESYNC_LATE_S the stream is asked to
+        resync on its next block. Costs nothing in the stream thread."""
+        self._now = float(device_now)
+        lag = self._now - (self.t0 + self.n_out / self.fs)
+        if (self.tag_time and lag > RESYNC_LATE_S and not self._burst_start
+                and not self._resync_wanted and not self._resync_pending):
+            self._resync_wanted = True
+        return lag
 
     def _resync(self) -> bool:
-        """Begin the new burst after a stall: skip to RESYNC_LEAD_S ahead of the device clock.
-        Returns False when that is past the end of the stream (nothing left to send)."""
-        now = float(self.device_time())
+        """Begin the new burst after a stall: skip to RESYNC_LEAD_S ahead of the device clock
+        (as watch() last saw it). Returns False when that is past the end of the stream."""
+        now = float(self._now)
         n_new = int(np.ceil((now + RESYNC_LEAD_S - self.t0) * self.fs))
         skipped = (n_new - self.n_out) / self.fs
         self.resyncs += 1
@@ -185,22 +196,16 @@ class EveToneSource(gr.sync_block):
         if n <= 0:
             self.done = True
             return -1
-        self._blocks += 1
-        if (self.device_time is not None and self.tag_time and not self._burst_start
-                and self._blocks % RESYNC_CHECK_BLOCKS == 0):
-            try:
-                lag = self._lag_s()
-            except Exception:       # noqa: BLE001  (the radio refused the time query: try again next time)
-                lag = 0.0
-            if lag > RESYNC_LATE_S:
-                # the stream is behind: close this burst with a short silent block (it is late
-                # and dropped like the rest) and begin a new one on the next call
-                n = min(n, 64)
-                out[:n] = 0
-                self.add_item_tag(0, self.nitems_written(0) + n - 1, pmt.intern("tx_eob"), pmt.PMT_T)
-                self.n_out += n
-                self._resync_pending = True
-                return n
+        if self._resync_wanted:
+            # the stream is behind (watch): close this burst with a short silent block (it is
+            # late and dropped like the rest) and begin a new one on the next call
+            self._resync_wanted = False
+            n = min(n, 64)
+            out[:n] = 0
+            self.add_item_tag(0, self.nitems_written(0) + n - 1, pmt.intern("tx_eob"), pmt.PMT_T)
+            self.n_out += n
+            self._resync_pending = True
+            return n
         n_idx = np.arange(self.n_out, self.n_out + n, dtype=np.float64)
         tones = self.map.tones_at_time(self.t0 + n_idx / self.fs)
         if self._mute_from is not None:

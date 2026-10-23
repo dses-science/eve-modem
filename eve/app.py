@@ -1471,6 +1471,7 @@ class EveApp(QtWidgets.QMainWindow):
         prow.addWidget(dt)
         self.lbl_stop = QtWidgets.QLabel("and when the target sets below the minimum elevation")
         self.lbl_stop.setStyleSheet(f"color: {TEAL};")
+        self.lbl_stop.setWordWrap(True)
         prow.addWidget(self.lbl_stop)
         prow.addStretch(1)
         f.addRow("Stop", prow)

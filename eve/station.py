@@ -355,15 +355,20 @@ class Session:
         cache: Dict[int, float] = {}
 
         def fD(t):
+            # 1 s resolution (rate <= 0.5 Hz/s): one model evaluation per distinct second,
+            # cached, then a vectorized gather. The per-sample Python loop this replaced cost
+            # the Raspberry Pi a third of a core on every Venus run (2026-10-23); the bench,
+            # with pre-compensation off, never ran it.
             t = np.atleast_1d(np.asarray(t, dtype=np.float64))
-            out = np.empty(t.shape)
-            for i, ti in enumerate(t):
-                key = int(ti)                      # 1 s resolution: rate <= 0.5 Hz/s
+            keys = np.floor(t).astype(np.int64)
+            uniq, inv = np.unique(keys, return_inverse=True)
+            vals = np.empty(uniq.shape, dtype=np.float64)
+            for i, key in enumerate(uniq.tolist()):
                 v = cache.get(key)
                 if v is None:
                     v = cache[key] = self.model.doppler_hz(float(key), f)
-                out[i] = v
-            return out
+                vals[i] = v
+            return vals[inv]
         return fD
 
     def build(self, t0: float) -> gr.top_block:
@@ -390,12 +395,9 @@ class Session:
 
         self.tone = gr_blocks.EveToneSource(s, rate, t0, doppler_hz=fD if opts.tx_precompensate else None,
                                             include_if=True, t_end_device=max(c.rx_stop for c in s.chunks) + opts.end_margin_s,
-                                            tag_time=not sim, device_time=self.radio.device_time if not sim else None,
-                                            on_resync=on_resync)
+                                            tag_time=not sim, on_resync=on_resync)
         if sim and getattr(self.radio, "resync_test", False):
-            # the software bench exercises the resync on the wall clock (tests only)
-            self.tone.tag_time = True
-            self.tone.device_time = self.radio.device_time
+            self.tone.tag_time = True       # the software bench exercises the resync on the wall clock (tests only)
         windows = [(c.index, c.rx_start, c.rx_stop, c.frame_first) for c in s.chunks]
         f_shift = p.f_if
         self.decim = gr_blocks.make_rx_decimator(p, self.radio.rx_rate, f_shift)
@@ -504,7 +506,10 @@ class Session:
                     self._end_after(None)                   # receive only: nothing of ours to wait for
                 if self._t_end_eff is not None:
                     t_end = self._t_end_eff
-                if self.tone.done and self.radio.device_time() >= t_end:
+                now = self.radio.device_time()
+                if opts.tx_enabled:
+                    self.tone.watch(now)        # the transmit stream's lag check (resync after a stall)
+                if self.tone.done and now >= t_end:
                     break
                 time.sleep(0.2)
             # drain: let the decimator and sink finish the samples already in flight
